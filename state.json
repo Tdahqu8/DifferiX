@@ -160,7 +160,7 @@
     "Simple commands via commands/ folder work and are moved to commands/done/",
     "A short smoke test covering the above passes"
   ],
-  "iteration_count": 5,
+  "iteration_count": 3,
   "research_data": [
     {
       "step": 1,

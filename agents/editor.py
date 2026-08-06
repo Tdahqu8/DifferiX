@@ -1,4 +1,5 @@
 import json
+import re
 from openai import OpenAI
 import config
 
@@ -7,76 +8,65 @@ client = OpenAI(
     api_key=config.OPENROUTER_API_KEY,
 )
 
-def run_editor(state, project_files=""):
-    system_prompt = f"""Ты — ИИ-Редактор кода. Напиши чистый код/XML на основе плана Исследователя из state.json.
-Выдай СТРОГО валидный JSON-объект БЕЗ разметки markdown (без ```json).
+def extract_code_block(text: str) -> str:
+    """Extracts raw code from Markdown ```python ... ``` blocks safely."""
+    pattern = r"```(?:python|xml|html|css|json)?\n(.*?)```"
+    match = re.search(pattern, text, re.DOTALL)
+    if match:
+        return match.group(1).strip()
+    
+    # Fallback if markdown tags are at the very edges
+    lines = text.strip().splitlines()
+    if lines and lines[0].startswith("```"):
+        lines = lines[1:]
+    if lines and lines[-1].startswith("```"):
+        lines = lines[:-1]
+    return "\n".join(lines).strip()
 
-Обязательные ключи:
-- "target_file": путь к файлу (строка)
-- "action": "create" или "modify"
-- "code": готовый код полностью одной строкой с экранированными символами (строка)
+def run_editor(state, project_files=""):
+    system_prompt = f"""Ты — ИИ-Редактор кода. Напиши чистый код/XML на основе плана Исследователя.
+
+ОБЯЗАТЕЛЬНЫЙ ФОРМАТ ОТВЕТА:
+Сначала укажи имя файла и действие в таком формате:
+TARGET_FILE: path/to/file.py
+ACTION: create (или modify)
+
+Затем напиши весь готовый код внутри обычного markdown-блока:
+```python
+# твой код здесь
 
 Список файлов проекта:
 {project_files}"""
 
     response = client.chat.completions.create(
-        model=config.MODEL_EDITOR,
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": f"State: {json.dumps(state, ensure_ascii=False)}"}
-        ],
-        response_format={"type": "json_object"},
-        temperature=0.1
-    )
+    model=config.MODEL_EDITOR,
+    messages=[
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": f"State: {json.dumps(state, ensure_ascii=False)}"}
+    ],
+    temperature=0.1
+)
 
-    if not response.choices:
-        raise RuntimeError("Editor: модель вернула пустой choices")
-
-    result_text = response.choices[0].message.content
-    if not result_text or not result_text.strip():
+    if not response.choices or not response.choices[0].message.content:
         raise RuntimeError("Editor: модель вернула пустой ответ")
 
-    result_text = result_text.strip()
-    
-    # Очистка от тройных бэктиков, если модель всё же их вставила
-    if result_text.startswith("```"):
-        lines = result_text.splitlines()
-        if lines[0].startswith("```"):
-            lines = lines[1:]
-        if lines and lines[-1].startswith("```"):
-            lines = lines[:-1]
-        result_text = "\n".join(lines).strip()
+    result_text = response.choices[0].message.content.strip()
 
-    try:
-        result = json.loads(result_text)
-    except json.JSONDecodeError as e:
-        # Логируем фрагмент ошибки для отладки
-        raise RuntimeError(
-            f"Editor: невалидный JSON от модели.\nОтвет был:\n{result_text[:1000]}"
-        ) from e
+    # Извлечение TARGET_FILE и ACTION из текстовых меток
+    target_file_match = re.search(r"TARGET_FILE:\s*([^\n]+)", result_text)
+    action_match = re.search(r"ACTION:\s*([^\n]+)", result_text)
 
-    # Нормализация кода
-    code = result.get("code")
-    if isinstance(code, dict):
-        code = (
-            code.get("content")
-            or code.get("code")
-            or code.get("text")
-            or json.dumps(code, ensure_ascii=False, indent=2)
-        )
-    elif isinstance(code, list):
-        code = "\n".join(str(x) for x in code)
-    elif code is None:
-        code = ""
-    else:
-        code = str(code)
+    target_file = target_file_match.group(1).strip() if target_file_match else ""
+    action = action_match.group(1).strip() if action_match else "modify"
 
-    result["code"] = code
+    # Безопасное извлечение кода через regex
+    code = extract_code_block(result_text)
 
-    if "target_file" in result and result["target_file"] is not None:
-        result["target_file"] = str(result["target_file"])
-
-    state["generated_code"] = result
+    state["generated_code"] = {
+        "target_file": target_file,
+        "action": action,
+        "code": code
+    }
     state["current_step"] = "review"
 
     usage = getattr(response, "usage", None)
