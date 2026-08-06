@@ -1,12 +1,170 @@
 {
-  "iteration_count": 0,
-  "current_step": "research",
-  "task": "Создать класс парового автостанка SteamAssemblyBench в Source/SteamAssemblyBench.cs",
-  "research_data": "",
-  "generated_code": {
-    "target_file": "",
-    "action": "",
-    "code": ""
+  "task_id": "pre-rimworld-foundation",
+  "created_at": "2026-08-06T12:30:00+06:00",
+  "updated_at": "2026-08-06T12:30:00+06:00",
+  "status": "in_progress",
+  "priority": "critical",
+
+  "goal": "Finish the minimum reliable foundation of f(x) before starting real testing on the RimWorld mod. Autocommit already exists. Now focus on basic lesson structure, stable orchestrator + logging, simple HITL, and minimal git/phone control.",
+
+  "context": {
+    "current_state": {
+      "done": [
+        "Basic agent roles (Researcher, Editor, Reviewer)",
+        "Python orchestrator (skeleton)",
+        "Git autocommit with timestamps"
+      ],
+      "missing": [
+        "Clean lesson folders and status lifecycle",
+        "Reliable logging",
+        "Basic HITL pause + summary",
+        "Minimal status files and command mechanism for phone control"
+      ]
+    },
+    "why_this_task": "Need a stable and observable core before running real experiments on RimWorld. Advanced memory features (Activation Score, sleep, personal/shared memory, semantic search, Manager) are intentionally postponed until after the first real test runs.",
+    "constraints": [
+      "Do NOT implement Activation Score",
+      "Do NOT implement sleep / memory maintenance",
+      "Do NOT implement Manager role",
+      "Do NOT implement semantic search or embeddings",
+      "Do NOT build a UI",
+      "Keep everything self-hosted and simple",
+      "Prefer working and readable code over perfect architecture"
+    ]
   },
-  "compiler_output": ""
+
+  "plan": [
+    {
+      "step": 1,
+      "title": "Basic Lesson Folder Structure + Minimal Lifecycle",
+      "description": "Replace any single-file lessons approach with a clean folder-based structure and simple status transitions.",
+      "concrete_tasks": [
+        "Create directories if they do not exist: lessons/observations/, lessons/candidates/, lessons/promoted/, lessons/deprecated/",
+        "Define a minimal lesson schema (JSON). Required fields: id, status, rule, why, tags (list), created_at. Optional but useful: source, related_files, priority",
+        "Implement helper functions or methods: create_observation(...), move_to_candidate(id), move_to_promoted(id), move_to_deprecated(id)",
+        "Each lesson must be stored as a separate .json file inside the folder that matches its status",
+        "Lesson id format example: L-YYYYMMDD-HHMMSS-<short_hash> or similar, must be unique"
+      ],
+      "acceptance": [
+        "Folders exist",
+        "Can create a new observation as a JSON file",
+        "Can move a lesson between statuses by changing folder + updating status field",
+        "No dependency on a single monolithic lessons file"
+      ],
+      "status": "pending",
+      "assigned_to": "editor"
+    },
+    {
+      "step": 2,
+      "title": "Stable Orchestrator Cycle + Logging",
+      "description": "Make the orchestrator robust enough for real runs and write clear logs.",
+      "concrete_tasks": [
+        "Catch and handle common failures: invalid JSON from agents, empty responses, timeouts, unexpected exceptions",
+        "On failure: log the error, save what is possible, and either retry lightly or stop the cycle cleanly (do not crash the whole process silently)",
+        "Write logs to files (e.g. logs/orchestrator.log or logs/YYYY-MM-DD.log)",
+        "Each log entry should contain: timestamp, cycle number, agent name, event type, short message",
+        "Also log when files are changed by agents (at least which paths)"
+      ],
+      "acceptance": [
+        "Orchestrator survives typical LLM/parsing errors without full crash",
+        "Logs are written to disk and are human-readable",
+        "It is possible to understand from logs what happened in a cycle"
+      ],
+      "status": "pending",
+      "assigned_to": "editor + reviewer"
+    },
+    {
+      "step": 3,
+      "title": "Basic HITL (Human-in-the-Loop)",
+      "description": "Force a pause after every N cycles and show a short summary to the human.",
+      "concrete_tasks": [
+        "Add a configurable parameter (e.g. HITL_EVERY_N_CYCLES = 3)",
+        "After every N cycles the orchestrator stops and waits for human input",
+        "Generate a short summary containing: current goal, what was changed, key decisions or errors, list of new/updated lessons if any",
+        "Save the summary both to console and to status/last_summary.md",
+        "Accept simple human replies: continue / stop / note:<text>",
+        "Keep the interaction minimal and terminal-friendly"
+      ],
+      "acceptance": [
+        "System pauses after N cycles",
+        "A readable summary is produced",
+        "Human can continue or stop the run",
+        "Summary is also written to status/last_summary.md"
+      ],
+      "status": "pending",
+      "assigned_to": "editor"
+    },
+    {
+      "step": 4,
+      "title": "Minimal Git-Cloud / Phone Control",
+      "description": "Allow monitoring and light control from a phone via git without a laptop.",
+      "concrete_tasks": [
+        "Create and keep updated: status/current.md — short live status (what is running now, current step, last error if any)",
+        "Create and keep updated: status/last_summary.md — the latest HITL summary",
+        "Create folder commands/",
+        "Orchestrator periodically checks commands/ for new files",
+        "Supported simple commands (minimum): pause, continue, stop, note (content of the file = note text)",
+        "After a command is processed, move it to commands/done/ (with timestamp in filename if possible)",
+        "Do not build anything complex — only the minimum needed for remote monitoring and light control"
+      ],
+      "acceptance": [
+        "status/current.md exists and is updated during runs",
+        "status/last_summary.md is updated after HITL pauses",
+        "Dropping a simple command file into commands/ has an effect",
+        "Processed commands are moved to commands/done/"
+      ],
+      "status": "pending",
+      "assigned_to": "editor"
+    },
+    {
+      "step": 5,
+      "title": "Smoke Integration Check",
+      "description": "Verify that the foundation pieces work together before starting RimWorld work.",
+      "concrete_tasks": [
+        "Run 1–2 short synthetic tasks through the orchestrator",
+        "Confirm that lessons can be created in the new folder structure",
+        "Confirm that logs are written",
+        "Confirm that HITL pause + summary works",
+        "Confirm that status files are updated",
+        "Confirm that a test command in commands/ is detected and processed",
+        "Fix only critical blockers found during this check"
+      ],
+      "acceptance": [
+        "A short end-to-end run completes without crashing",
+        "All four foundation pieces (lessons, logging, HITL, status/commands) show basic working behaviour"
+      ],
+      "status": "pending",
+      "assigned_to": "reviewer + editor"
+    }
+  ],
+
+  "current_step": 1,
+
+  "out_of_scope": [
+    "Activation Score and the formula A = ...",
+    "Ebbinghaus forgetting curve logic",
+    "Sleep / idle memory maintenance",
+    "Personal vs shared memory layers",
+    "Semantic similarity / embeddings",
+    "Manager agent",
+    "Advanced token budgets and desynchronization",
+    "Any RimWorld-specific code or mod logic",
+    "UI / web interface"
+  ],
+
+  "notes_for_agents": [
+    "Researcher: Propose only the minimum necessary structure. Do not design advanced memory features in this task. Keep schemas small and clear.",
+    "Editor: Implement concrete, working code. Make each step finishable and testable. Prefer simple functions and explicit file operations.",
+    "Reviewer: Focus on reliability and simplicity. Reject over-engineering. Check that acceptance criteria of each step are actually met."
+  ],
+
+  "definition_of_done": [
+    "lessons/observations, candidates, promoted (and optionally deprecated) folders exist and are used",
+    "A lesson can be created and moved between statuses as separate JSON files",
+    "Orchestrator handles common errors and writes readable logs to disk",
+    "HITL pause after N cycles works and writes status/last_summary.md",
+    "status/current.md is updated during runs",
+    "Simple commands via commands/ folder work and are moved to commands/done/",
+    "A short smoke test covering the above passes"
+  ]
 }

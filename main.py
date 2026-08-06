@@ -2,11 +2,12 @@ import json
 import os
 import sys
 import config
+from datetime import datetime
 from dotenv import load_dotenv
 
 from tools.file_manager import FolderSandbox
 from tools.compiler import run_universal_build
-from tools.backup_manager import ProjectBackupSystem
+from tools.backup_manager import get_repo, make_auto_commit, safe_rollback
 from tools.changelog_engine import ChangelogEngine
 from tools.project_scanner import get_project_files
 
@@ -36,7 +37,11 @@ class OrchestratorConsole:
             json.dump(state, f, indent=2, ensure_ascii=False)
 
     def start(self):
-        print("====== 🤖 AI ORCHESTRATOR КОНСОЛЬ v1.0 ======")
+        # Инициализируем Git-репозиторий
+        repo = get_repo()
+        make_auto_commit(repo)
+        print("Autosaved before starting work. Автосохранено до начала работы.")
+        print("====== f(x) AI ORCHESTRATOR КОНСОЛЬ v1.0 ======")
         print("Выберите рабочий проект:")
         for k, v in config.PROJECTS.items():
             print(f"{k}) {v['name']} ({v['lang']})")
@@ -48,28 +53,19 @@ class OrchestratorConsole:
 
         proj = config.PROJECTS[choice]
         sandbox = FolderSandbox(proj["path"])
-        backup = ProjectBackupSystem(proj["path"])
         logger = ChangelogEngine() # Инициализируем систему летописи
         
         # Меню действий
         print("\nЧто сделать?")
         print("1) Запустить цикл ИИ-агентов для текущей задачи в state.json")
-        print("2) Откатить проект к одному из ZIP-бэкапов")
+        print("2) Откатить проект (Git Safe Rollback)")
         action = input("Введи номер действия: ").strip()
 
         if action == "2":
-            backups = backup.list_backups()
-            if not backups:
-                print("Бэкапов для этого проекта не найдено.")
-                return
-            for idx, b in enumerate(backups): 
-                print(f"{idx}) {b}")
-            b_choice = int(input("Какой бэкап развернуть? Введи индекс: "))
-            backup.restore_snapshot(backups[b_choice])
+            target_hash = input("Введи коммит-хеш или имя тега для отката: ").strip()
+            if target_hash:
+                safe_rollback(repo, target_hash)
             return
-
-        # Изначальный бэкап перед началом работы ИИ
-        backup.create_snapshot("USER", "Before_AI_Work")
 
         # Переменная для хранения подсчитанной разницы файлов между шагами
         current_diff = None
@@ -83,15 +79,15 @@ class OrchestratorConsole:
             if state["iteration_count"] >= config.MAX_ITERATIONS or self.total_cost >= config.MAX_BUDGET_USD:
                 print("\n⚠️ АГЕНТЫ УШЛИ В ПАУЗУ И ЗАСНУЛИ, чтобы сберечь твои токены!")
                 print(f"Последний статус билдера: {state['compiler_output']}")
-                cmd = input("\nКоманда ([C]продолжить / [B]сделать бэкап и выйти / [R]стереть изменения): ").strip().lower()
+                cmd = input("\nКоманда ([C]продолжить / [B]сделать коммит и выйти / [R]стереть изменения через Git Rollback): ").strip().lower()
                 if cmd == 'c':
                     state["iteration_count"] = 0
                     self.save_state(state)
                     continue
                 elif cmd == 'r':
-                    backups = backup.list_backups()
-                    if backups:
-                        backup.restore_snapshot(backups[-1])
+                    target_hash = input("Введи коммит-хеш для восстановления: ").strip()
+                    if target_hash:
+                        safe_rollback(repo, target_hash)
                     break
                 else:
                     break
@@ -129,13 +125,13 @@ class OrchestratorConsole:
                 success, log = run_universal_build(proj["path"], proj["lang"])
                 state["compiler_output"] = log
                 
-                # Делаем автосохранение этой итерации
-                backup.create_snapshot(f"Iter_{state['iteration_count']}", "AutoSave")
-
                 if success:
                     print(f"🎉 СИНТАКСИС ИДЕАЛЕН! Код успешно собран. Логи:\n{log}")
                     state["current_step"] = "done"
                     self.save_state(state)
+                    
+                    # Создаем успешный Git коммит и автоматически вешаем тег
+                    make_auto_commit(repo)
                     
                     # Фиксируем успех в летописи
                     logger.record_iteration(state, diff_data=current_diff)

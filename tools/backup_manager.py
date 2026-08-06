@@ -1,60 +1,107 @@
+import git
 import os
-import shutil
-import zipfile
 from datetime import datetime
+from pathlib import Path
 
-BACKUP_STORE_DIR = "./AI_Orchestrator_Backups"
+# --- КОНФИГУРАЦИЯ ---
+REPO_PATH = '.'  # Путь к репозиторию (текущая папка)
+IGNORE_PATTERNS = [
+    '.env',           # Файлы с ключами
+    '*.log',          # Лог-файлы
+    'pycache/',   # Кэш Python
+    '*.tmp',          # Временные файлы
+]
 
-class ProjectBackupSystem:
-    """Система автосохранений с точной датой, временем и именем корневой папки"""
-    def __init__(self, target_project_path):
-        self.project_path = os.path.abspath(target_project_path)
-        self.project_name = os.path.basename(self.project_path)
-        os.makedirs(BACKUP_STORE_DIR, exist_ok=True)
+def get_repo():
+    """Инициализация репозитория"""
+    try:
+        return git.Repo(REPO_PATH)
+    except git.exc.InvalidGitRepositoryError:
+        print("❌ Ошибка: Текущая папка не является Git-репозиторием.")
+        print("💡 Решение: Выполните 'git init' в терминале.")
+        exit(1)
 
-    def list_backups(self):
-        """Возвращает список всех ZIP бэкапов для текущего проекта"""
-        if not os.path.exists(BACKUP_STORE_DIR):
-            return []
-        files = [f for f in os.listdir(BACKUP_STORE_DIR) if f.startswith(self.project_name) and f.endswith('.zip')]
-        return sorted(files)
+def should_ignore(file_path):
+    """Проверка: попадает ли файл в список игнорируемых"""
+    file_name = os.path.basename(file_path)
+    for pattern in IGNORE_PATTERNS:
+        # Простая проверка по имени или расширению
+        if pattern.startswith('*'):
+            if file_name.endswith(pattern[1:]): # Например *.log
+                return True
+        elif pattern.endswith('/'):
+            if pattern[:-1] in file_path: # Например pycache/
+                return True
+        else:
+            if file_name == pattern: # Точное совпадение, например .env
+                return True
+    return False
 
-    def create_snapshot(self, agent_name, comment=""):
-        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        archive_name = f"{self.project_name}_{timestamp}_{agent_name}"
-        if comment:
-            clean_comment = "".join(c for c in comment if c.isalnum() or c in ('_', '-'))[:20]
-            archive_name += f"_{clean_comment}"
-            
-        zip_path = os.path.join(BACKUP_STORE_DIR, f"{archive_name}.zip")
+def make_auto_commit(repo):
+    """Создание коммита с обработкой ошибок и фильтрацией файлов"""
+    try:
+        # 1. Получаем список измененных файлов
+        changed_files = [item.a_path for item in repo.index.diff(None)]
+        untracked_files = repo.untracked_files
+        all_candidates = changed_files + untracked_files
+
+        # 2. Фильтруем файлы (исключаем .env и другие из списка)
+        files_to_add = [f for f in all_candidates if not should_ignore(f)]
+
+        if not files_to_add:
+            # Если после фильтрации файлов нет, проверяем, были ли вообще изменения
+            if not repo.is_dirty() and not untracked_files:
+                print("ℹ️ Изменений нет.")
+                return
+            else:
+                print("⚠️ Изменения есть, но все файлы попали в список игнорируемых (.env и др.). Пропуск.")
+                return
+
+        # 3. Добавляем только разрешенные файлы
+        # Примечание: git.add() принимает пути. Для точности добавляем по одному или списком
+        repo.git.add(files_to_add)
+
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        message = f"Auto-save: {timestamp}"
+
+        # 4. Попытка коммита
+        try:
+            commit = repo.index.commit(message)
+            print(f"✅ Коммит создан: {message} (Хеш: {commit.hexsha[:7]})")
+        except git.exc.GitCommandError as e:
+            print(f"❌ Ошибка при коммите: {e}")
+            return
+
+        # 5. Попытка создания тега
+        try:
+            tag_name = f"save-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+            repo.create_tag(tag_name)
+            print(f"🏷️ Тег создан: {tag_name}")
+        except git.exc.GitCommandError as e:
+            print(f"⚠️ Ошибка при создании тега (возможно, он уже есть): {e}")
+            # Мы не прерываем выполнение, так как коммит уже успешен
+
+    except Exception as e:
+        print(f"❌ Критическая ошибка в процессе автосохранения: {e}")
+
+def safe_rollback(repo, target_hash):
+    """
+    Безопасный откат: создает новую ветку с состоянием прошлого коммита.
+    Это не удаляет историю, а создает точку восстановления.
+    """
+    branch_name = f"rollback-to-{target_hash[:7]}"
+    try:
+        # Проверяем, существует ли такой хеш
+        commit = repo.commit(target_hash)
         
-        with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-            for root, dirs, files in os.walk(self.project_path):
-                if any(ignore in root for ignore in [".git", "AI_Orchestrator_Backups", ".vs", "bin", "obj"]):
-                    continue
-                for file in files:
-                    full_path = os.path.join(root, file)
-                    rel_path = os.path.relpath(full_path, self.project_path)
-                    zipf.write(full_path, rel_path)
-        print(f"📦 Снимок сохранен: {zip_path}")
-        return zip_path
-
-    def restore_snapshot(self, zip_filename):
-        zip_path = os.path.join(BACKUP_STORE_DIR, zip_filename)
-        if not os.path.exists(zip_path):
-            print("❌ Снимок не найден.")
-            return False
-            
-        for item in os.listdir(self.project_path):
-            item_path = os.path.join(self.project_path, item)
-            if item in [".git", "AI_Orchestrator_Backups", ".vs", "bin", "obj"]:
-                continue
-            if os.path.isdir(item_path): 
-                shutil.rmtree(item_path)
-            else: 
-                os.remove(item_path)
-            
-        with zipfile.ZipFile(zip_path, 'r') as zipf:
-            zipf.extractall(self.project_path)
-        print(f"🔄 Проект '{self.project_name}' успешно откачен к {zip_filename}!")
-        return True
+        # Создаем новую ветку, указывающую на старый коммит
+        new_branch = repo.create_head(branch_name, commit)
+        
+        # Переключаемся на эту ветку
+        repo.heads[branch_name].checkout()
+        
+        print(f"🔙 Успешный откат! Создана и активирована ветка '{branch_name}'.")
+        print(f"   Старые файлы восстановлены. История сохранена в ветке 'main' (или предыдущей).")
+        print(f"   Чтобы вернуться назад, просто переключитесь на старую ветку: git checkout main")
+    except git.exc.GitError as e:
+        print(f"Git error occurred: {e}")
