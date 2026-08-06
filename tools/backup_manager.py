@@ -37,34 +37,30 @@ def should_ignore(file_path):
                 return True
     return False
 
-def make_auto_commit(repo):
+def make_auto_commit(repo, agent_name="system", comment=""):
     """Создание коммита с обработкой ошибок и фильтрацией файлов"""
     try:
-        # 1. Получаем список измененных файлов
         changed_files = [item.a_path for item in repo.index.diff(None)]
         untracked_files = repo.untracked_files
         all_candidates = changed_files + untracked_files
 
-        # 2. Фильтруем файлы (исключаем .env и другие из списка)
         files_to_add = [f for f in all_candidates if not should_ignore(f)]
 
         if not files_to_add:
-            # Если после фильтрации файлов нет, проверяем, были ли вообще изменения
             if not repo.is_dirty() and not untracked_files:
                 print("ℹ️ Изменений нет.")
                 return
             else:
-                print("⚠️ Изменения есть, но все файлы попали в список игнорируемых (.env и др.). Пропуск.")
+                print("⚠️ Изменения есть, но все файлы в игноре. Пропуск.")
                 return
 
-        # 3. Добавляем только разрешенные файлы
-        # Примечание: git.add() принимает пути. Для точности добавляем по одному или списком
         repo.git.add(files_to_add)
 
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        message = f"Auto-save: {timestamp}"
+        message = f"Auto-save [{agent_name}]: {timestamp}"
+        if comment:
+            message += f" — {comment[:80]}"
 
-        # 4. Попытка коммита
         try:
             commit = repo.index.commit(message)
             print(f"✅ Коммит создан: {message} (Хеш: {commit.hexsha[:7]})")
@@ -72,14 +68,8 @@ def make_auto_commit(repo):
             print(f"❌ Ошибка при коммите: {e}")
             return
 
-        # 5. Попытка создания тега
-        try:
-            tag_name = f"save-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
-            repo.create_tag(tag_name)
-            print(f"🏷️ Тег создан: {tag_name}")
-        except git.exc.GitCommandError as e:
-            print(f"⚠️ Ошибка при создании тега (возможно, он уже есть): {e}")
-            # Мы не прерываем выполнение, так как коммит уже успешен
+        # Тег только если это важный коммит (успех) — вызывающий код сам решит
+        # Здесь тег больше не создаём автоматически
 
     except Exception as e:
         print(f"❌ Критическая ошибка в процессе автосохранения: {e}")
@@ -105,3 +95,27 @@ def safe_rollback(repo, target_hash):
         print(f"   Чтобы вернуться назад, просто переключитесь на старую ветку: git checkout main")
     except git.exc.GitError as e:
         print(f"Git error occurred: {e}")
+
+def show_all_commits(repo, limit=None):
+    """Показать все коммиты (или limit штук)"""
+    commits = list(repo.iter_commits())
+    if limit is not None:
+        commits = commits[:limit]
+
+    print(f"\n--- Git commits ({len(commits)}) ---")
+    for i, c in enumerate(commits):
+        short = c.hexsha[:7]
+        msg = c.message.strip().split('\n')[0][:70]
+        date = c.committed_datetime.strftime("%Y-%m-%d %H:%M")
+        print(f"{i:3}. {short} | {date} | {msg}")
+    return commits
+
+
+def create_success_tag(repo):
+    """Создать тег только на успешном завершении"""
+    try:
+        tag_name = f"success-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+        repo.create_tag(tag_name)
+        print(f"🏷️ Тег успеха создан: {tag_name}")
+    except Exception as e:
+        print(f"⚠️ Не удалось создать тег: {e}")
