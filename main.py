@@ -218,6 +218,49 @@ class OrchestratorConsole:
                 res_file = generated.get("target_file")
                 res_code = generated.get("code")
 
+                generated = state.get("generated_code", {})
+                res_file = generated.get("target_file")
+                res_code = generated.get("code")
+
+                print(f"📄 target_file: {res_file}")
+                print(f"📝 code type: {type(res_code)}, length: {len(str(res_code)) if res_code is not None else 0}")
+
+                # нормализация code → str (как делали раньше)
+                if isinstance(res_code, dict):
+                    res_code = (
+                        res_code.get("content")
+                        or res_code.get("code")
+                        or res_code.get("text")
+                        or json.dumps(res_code, ensure_ascii=False, indent=2)
+                    )
+                elif isinstance(res_code, list):
+                    res_code = "\n".join(str(x) for x in res_code)
+                elif res_code is None:
+                    res_code = ""
+                else:
+                    res_code = str(res_code)
+
+                if not res_file:
+                    print("❌ Редактор не указал target_file")
+                    self.save_state(state)
+                    continue
+
+                print("📖 Читаю старый файл...")
+                old_code = self.sandbox.safe_read_file(res_file)
+                if isinstance(old_code, str) and old_code.startswith("ОШИБКА"):
+                    old_code = ""
+                elif not isinstance(old_code, str):
+                    old_code = str(old_code) if old_code is not None else ""
+
+                print("🔍 Строю diff...")
+                current_diff = self.logger.generate_diff(old_code, res_code, res_file)
+
+                print("💾 Записываю файл...")
+                print(self.sandbox.safe_write_code(res_file, res_code))
+
+                self.save_state(state)
+                print("✅ Шаг Editor завершён, переходим дальше")
+
                 # --- защита от code = dict / list / None ---
                 if isinstance(res_code, dict):
                     # частые варианты, как модели заворачивают код
