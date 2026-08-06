@@ -9,12 +9,14 @@ client = OpenAI(
 
 def run_editor(state, project_files=""):
     system_prompt = f"""Ты — ИИ-Редактор кода. Напиши чистый код/XML на основе плана Исследователя из state.json.
-Не пиши никаких разговоров и сообщений. Выдай СТРОГО JSON-объект с ключами:
-- "target_file": путь к файлу
-- "action": действие ("create" или "modify")
-- "code": готовый код или XML (обязательно строкой, не объектом)
+Выдай СТРОГО валидный JSON-объект БЕЗ разметки markdown (без ```json).
 
-Список файлов проекта для точных путей:
+Обязательные ключи:
+- "target_file": путь к файлу (строка)
+- "action": "create" или "modify"
+- "code": готовый код полностью одной строкой с экранированными символами (строка)
+
+Список файлов проекта:
 {project_files}"""
 
     response = client.chat.completions.create(
@@ -27,30 +29,33 @@ def run_editor(state, project_files=""):
         temperature=0.1
     )
 
-    # --- защита от пустого ответа ---
     if not response.choices:
         raise RuntimeError("Editor: модель вернула пустой choices")
 
     result_text = response.choices[0].message.content
-
-    if result_text is None:
-        raise RuntimeError(
-            "Editor: модель вернула content=None. "
-            "Попробуй другую модель или повтори запрос."
-        )
+    if not result_text or not result_text.strip():
+        raise RuntimeError("Editor: модель вернула пустой ответ")
 
     result_text = result_text.strip()
-    if not result_text:
-        raise RuntimeError("Editor: модель вернула пустую строку")
+    
+    # Очистка от тройных бэктиков, если модель всё же их вставила
+    if result_text.startswith("```"):
+        lines = result_text.splitlines()
+        if lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].startswith("```"):
+            lines = lines[:-1]
+        result_text = "\n".join(lines).strip()
 
     try:
         result = json.loads(result_text)
     except json.JSONDecodeError as e:
+        # Логируем фрагмент ошибки для отладки
         raise RuntimeError(
             f"Editor: невалидный JSON от модели.\nОтвет был:\n{result_text[:1000]}"
         ) from e
 
-    # Нормализация code → всегда строка
+    # Нормализация кода
     code = result.get("code")
     if isinstance(code, dict):
         code = (
@@ -68,7 +73,6 @@ def run_editor(state, project_files=""):
 
     result["code"] = code
 
-    # target_file тоже строкой
     if "target_file" in result and result["target_file"] is not None:
         result["target_file"] = str(result["target_file"])
 

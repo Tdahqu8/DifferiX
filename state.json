@@ -4,7 +4,7 @@
   "updated_at": "2026-08-06T12:30:00+06:00",
   "status": "in_progress",
   "priority": "critical",
-  "goal": "Finish the minimum reliable foundation of f(x) before starting real testing on the RimWorld mod. Autocommit already exists. Now focus on basic lesson structure, stable orchestrator + logging, simple HITL, and minimal git/phone control.",
+  "goal": "Finish the minimum reliable foundation of f(x) 1.1 before starting real testing on the RimWorld mod. Autocommit already exists. Now focus on basic lesson structure, stable orchestrator + logging, simple HITL, and minimal git/phone control.",
   "context": {
     "current_state": {
       "done": [
@@ -160,7 +160,7 @@
     "Simple commands via commands/ folder work and are moved to commands/done/",
     "A short smoke test covering the above passes"
   ],
-  "iteration_count": 1,
+  "iteration_count": 2,
   "research_data": [
     {
       "step": 1,

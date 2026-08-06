@@ -218,10 +218,6 @@ class OrchestratorConsole:
                 res_file = generated.get("target_file")
                 res_code = generated.get("code")
 
-                generated = state.get("generated_code", {})
-                res_file = generated.get("target_file")
-                res_code = generated.get("code")
-
                 print(f"📄 target_file: {res_file}")
                 print(f"📝 code type: {type(res_code)}, length: {len(str(res_code)) if res_code is not None else 0}")
 
