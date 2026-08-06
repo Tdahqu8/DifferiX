@@ -7,8 +7,8 @@ OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
 # Назначение моделей агентам
 MODEL_RESEARCHER = "nvidia/nemotron-3-ultra-550b-a55b:free"
-MODEL_EDITOR = "cohere/north-mini-code:free"
-MODEL_REVIEWER = "nvidia/nemotron-3-nano-30b-a3b:free"
+MODEL_EDITOR     = "poolside/laguna-s-2.1:free"
+MODEL_REVIEWER   = "nvidia/nemotron-3-super-120b-a12b:free"
 
 # Цены (для бесплатного тарифа 0)
 PRICE_INPUT_1M = 0.0
