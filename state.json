@@ -134,7 +134,7 @@
       "assigned_to": "reviewer + editor"
     }
   ],
-  "current_step": "research",
+  "current_step": "edit",
   "out_of_scope": [
     "Activation Score and the formula A = ...",
     "Ebbinghaus forgetting curve logic",
@@ -160,5 +160,108 @@
     "Simple commands via commands/ folder work and are moved to commands/done/",
     "A short smoke test covering the above passes"
   ],
-  "iteration_count": 0
+  "iteration_count": 0,
+  "research_data": [
+    {
+      "step": 1,
+      "title": "Basic Lesson Folder Structure + Minimal Lifecycle",
+      "details": {
+        "directory_layout": {
+          "base": "lessons/",
+          "subdirs": [
+            "observations",
+            "candidates",
+            "promoted",
+            "deprecated"
+          ]
+        },
+        "lesson_schema": {
+          "required": [
+            "id",
+            "status",
+            "rule",
+            "why",
+            "tags",
+            "created_at"
+          ],
+          "optional": [
+            "source",
+            "related_files",
+            "priority"
+          ],
+          "example_id_format": "L-YYYYMMDD-HHMMSS-<short_hash>"
+        },
+        "id_generation": "Use datetime.utcnow().strftime('%Y%m%d-%H%M%S') + '-' + first 6 chars of uuid4().hex",
+        "file_naming": "{id}.json",
+        "helper_functions": [
+          {
+            "name": "create_observation",
+            "params": [
+              "rule: str",
+              "why: str",
+              "tags: List[str]",
+              "source: Optional[str] = None",
+              "related_files: Optional[List[str]] = None",
+              "priority: Optional[int] = None"
+            ],
+            "returns": "str (lesson_id)",
+            "behavior": "Generate id, set status='observation', created_at=ISO timestamp, write JSON to lessons/observations/{id}.json, return id"
+          },
+          {
+            "name": "move_lesson",
+            "params": [
+              "lesson_id: str",
+              "new_status: str"
+            ],
+            "returns": "bool",
+            "behavior": "Find lesson file in any subdir, read JSON, update status field, move file to lessons/{new_status}/{id}.json, write updated JSON. Valid statuses: observation, candidate, promoted, deprecated"
+          },
+          {
+            "name": "load_lesson",
+            "params": [
+              "lesson_id: str"
+            ],
+            "returns": "dict or None",
+            "behavior": "Search all subdirs, return parsed JSON"
+          }
+        ],
+        "acceptance_checks": [
+          "All four directories exist after init",
+          "create_observation writes valid JSON with correct schema",
+          "move_lesson changes folder and updates status field",
+          "No monolithic lessons file used"
+        ]
+      }
+    },
+    {
+      "step": 2,
+      "title": "Stable Orchestrator Cycle + Logging",
+      "details": {
+        "logging_setup": {
+          "log_dir": "logs/",
+          "log_file_pattern": "orchestrator_{YYYY-MM-DD}.log",
+          "format": "%(asctime)s | cycle=%(cycle)d | agent=%(agent)s | event=%(event)s | %(message)s",
+          "level": "INFO",
+          "handler": "RotatingFileHandler (maxBytes=1_000_000, backupCount=3) + StreamHandler"
+        },
+        "orchestrator_loop": {
+          "pseudocode": "cycle = 0\nwhile not shutdown_flag:\n    cycle += 1\n    try:\n        for agent in agents:\n            log(cycle, agent.name, 'start', '')\n            result = agent.run(cycle, context)\n            log(cycle, agent.name, 'success', f'output_keys={list(result.keys())}')\n            context.update(result)\n            log_file_changes(agent.name, result.get('changed_files', []))\n        if hitl_due(cycle): hitl_pause(cycle, context)\n    except (JSONDecodeError, TimeoutError, ValueError) as e:\n        log(cycle, 'orchestrator', 'error', f'{type(e).__name__}: {e}')\n        save_context_snapshot(cycle, context)\n        if not retry_lightly(): break\n    except Exception as e:\n        log(cycle, 'orchestrator', 'fatal', f'{type(e).__name__}: {e}')\n        save_context_snapshot(cycle, context)\n        break"
+        },
+        "error_handling": {
+          "invalid_json": "Catch json.JSONDecodeError, log raw response snippet, skip agent for this cycle",
+          "empty_response": "Treat as error, log, skip",
+          "timeout": "Use signal.alarm or threading.Timer (cross-platform: use concurrent.futures with timeout)",
+          "unexpected_exception": "Log traceback, save context snapshot to logs/context_cycle_{cycle}.json, decide retry vs stop via config"
+        },
+        "file_change_logging": "Agents return dict with optional 'changed_files': List[str]; orchestrator logs each path with event='file_change'",
+        "context_snapshot": "Write context (minus large objects) to logs/context_cycle_{cycle}.json on error"
+      },
+      "acceptance_checks": [
+        "Orchestrator continues after agent JSON parse error",
+        "Logs are human-readable, contain timestamp, cycle, agent, event, message",
+        "File changes are logged",
+        "No silent crashes"
+      ]
+    }
+  ]
 }

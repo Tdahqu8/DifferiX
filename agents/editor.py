@@ -29,14 +29,19 @@ def run_editor(state, project_files=""):
     
     result_text = response.choices[0].message.content
     result = json.loads(result_text)
-    
+
+    # Нормализация code → всегда строка
+    code = result.get("code")
+    if isinstance(code, dict):
+        code = code.get("content") or code.get("code") or code.get("text") or json.dumps(code, ensure_ascii=False, indent=2)
+    elif isinstance(code, list):
+        code = "\n".join(str(x) for x in code)
+    elif code is None:
+        code = ""
+    else:
+        code = str(code)
+
+    result["code"] = code
     state["generated_code"] = result
-    state["current_step"] = "review"
-    
-    # Возвращаем метаданные о токенах для main.py
-    usage_meta = type('Meta', (), {
-        'prompt_token_count': response.usage.prompt_tokens,
-        'candidates_token_count': response.usage.completion_tokens
-    })
     
     return state, usage_meta

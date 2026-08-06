@@ -205,13 +205,37 @@ class OrchestratorConsole:
                 state, meta = run_editor(state, project_files)
                 self.update_costs(meta)
 
-                res_file = state["generated_code"]["target_file"]
-                res_code = state["generated_code"]["code"]
+                generated = state.get("generated_code", {})
+                res_file = generated.get("target_file")
+                res_code = generated.get("code")
+
+                # --- защита от code = dict / list / None ---
+                if isinstance(res_code, dict):
+                    # частые варианты, как модели заворачивают код
+                    res_code = (
+                        res_code.get("content")
+                        or res_code.get("code")
+                        or res_code.get("text")
+                        or json.dumps(res_code, ensure_ascii=False, indent=2)
+                    )
+                elif isinstance(res_code, list):
+                    res_code = "\n".join(str(x) for x in res_code)
+                elif res_code is None:
+                    res_code = ""
+                else:
+                    res_code = str(res_code)
+
+                if not res_file:
+                    print("❌ Редактор не указал target_file. Пропуск записи.")
+                    self.save_state(state)
+                    continue
 
                 # Читаем старый файл для diff
                 old_code = self.sandbox.safe_read_file(res_file)
-                if old_code.startswith("ОШИБКА"):
+                if isinstance(old_code, str) and old_code.startswith("ОШИБКА"):
                     old_code = ""
+                elif not isinstance(old_code, str):
+                    old_code = str(old_code) if old_code is not None else ""
 
                 current_diff = self.logger.generate_diff(old_code, res_code, res_file)
 
