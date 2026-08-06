@@ -23,8 +23,8 @@ PROJECTS = {
         "lang": "csharp"
     },
     "2": {
-        "name": "Function",
-        "path": "C:\\projects-py\\f(x)",
+        "name": "Function 1.1",
+        "path": "C:\\projects-py\\function_1.1",
         "lang": "python"
     }
 }
