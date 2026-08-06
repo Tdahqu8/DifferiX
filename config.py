@@ -14,7 +14,7 @@ MODEL_REVIEWER = "nvidia/nemotron-3-nano-30b-a3b:free"
 PRICE_INPUT_1M = 0.0
 PRICE_OUTPUT_1M = 0.0
 MAX_ITERATIONS = 5
-MAX_BUDGET_USD = 0
+MAX_BUDGET_USD = 1.0
 
 PROJECTS = {
     "1": {
