@@ -134,7 +134,7 @@
       "assigned_to": "reviewer + editor"
     }
   ],
-  "current_step": 1,
+  "current_step": "research",
   "out_of_scope": [
     "Activation Score and the formula A = ...",
     "Ebbinghaus forgetting curve logic",
