@@ -202,6 +202,15 @@ class OrchestratorConsole:
 
             elif state.get("current_step") == "edit":
                 print("\n• [Шаг 2]: Редактор пишет код...")
+                try:
+                    state, meta = run_editor(state, project_files)
+                    self.update_costs(meta)
+                except Exception as e:
+                    print(f"❌ Ошибка Editor: {e}")
+                    # Можно увеличить счётчик и уйти в паузу/повтор
+                    state["iteration_count"] = state.get("iteration_count", 0) + 1
+                    self.save_state(state)
+                    continue
                 state, meta = run_editor(state, project_files)
                 self.update_costs(meta)
 
