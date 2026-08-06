@@ -74,5 +74,14 @@ ACTION: create (или modify)
         "prompt_token_count": getattr(usage, "prompt_tokens", 0) or 0,
         "candidates_token_count": getattr(usage, "completion_tokens", 0) or 0
     })
+    if not response or getattr(response, 'choices', None) is None:
+        print(f"❌ [Reviewer Error] Invalid LLM Response: {response}")
+        # Handle failure gracefully (e.g., return current state without failing hard)
+        return state, {"error": "Reviewer received empty response from LLM"}
 
+    if not response.choices:
+        print("❌ [Reviewer Error] Response choices list is empty.")
+        return state, {"error": "Empty choices array"}
+
+    result_text = response.choices[0].message.content
     return state, usage_meta
