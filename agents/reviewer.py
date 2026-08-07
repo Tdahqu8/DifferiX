@@ -35,9 +35,9 @@ def run_reviewer(state):
     "dangerous_code_found": false,
     "should_create_observation": true,
     "observation_draft": {
-    "rule": "короткое правило на будущее",
-    "why": "почему это важно",
-    "tags": ["compiler", "path", "..."]
+        "rule": "короткое правило на будущее",
+        "why": "почему это важно",
+        "tags": ["compiler", "path", "..."]
     },
     "reasoning_summary": "как ты пришёл к выводу (2-5 предложений)"
 }
@@ -57,27 +57,51 @@ def run_reviewer(state):
         temperature=0.1
     )
     
-    result_text = response.choices[0].message.content
-    result = json.loads(result_text)
+    # 1. Проверка существования choices
+    if not response or not getattr(response, "choices", None) or len(response.choices) == 0:
+        raise RuntimeError("Reviewer: модель вернула пустой ответ или response.choices == None")
+
+    # 2. Безопасное извлечение message и content
+    first_choice = response.choices[0]
+    if not first_choice or not getattr(first_choice, "message", None):
+        raise RuntimeError("Reviewer: отсутствует message в ответе модели")
+
+    result_text = first_choice.message.content or ""
+    if not result_text.strip():
+        raise RuntimeError("Reviewer: модель вернула пустую строку content")
+
+    # 3. Безопасный парсинг JSON
+    try:
+        result = json.loads(result_text)
+    except json.JSONDecodeError as e:
+        raise RuntimeError(f"Reviewer: не удалось разобрать JSON от модели: {e}\nRaw output: {result_text[:200]}")
     
-    if not result["is_approved"]:
+    # 4. Обработка вердикта
+    if not result.get("is_approved", False):
         fix_instruction = result.get("fix_instruction", "")
 
         if isinstance(state.get("research_data"), dict):
-            # If research_data is a dict, save the feedback under a key or update notes
             state["research_data"]["reviewer_fix"] = fix_instruction
         elif isinstance(state.get("research_data"), str):
             state["research_data"] += f"\n[Правка Ревизора]: {fix_instruction}"
         else:
             state["research_data"] = f"[Правка Ревизора]: {fix_instruction}"
+
+        state["review_result"] = result
         state["current_step"] = "edit"
-        state["iteration_count"] += 1
+        state["iteration_count"] = state.get("iteration_count", 0) + 1
     else:
+        state["review_result"] = result
         state["current_step"] = "done"
         
+    # 5. Безопасное извлечение токенов
+    usage = getattr(response, "usage", None)
+    prompt_tokens = getattr(usage, "prompt_tokens", 0) if usage else 0
+    completion_tokens = getattr(usage, "completion_tokens", 0) if usage else 0
+
     usage_meta = type('Meta', (), {
-        'prompt_token_count': response.usage.prompt_tokens,
-        'candidates_token_count': response.usage.completion_tokens
+        'prompt_token_count': prompt_tokens,
+        'candidates_token_count': completion_tokens
     })
     
-    return state, usage_meta
+    return state, usage_meta    
