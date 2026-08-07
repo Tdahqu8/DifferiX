@@ -286,7 +286,14 @@ class OrchestratorConsole:
             elif state.get("current_step") == "review":
                 print("\n• [Шаг 3]: Запуск компиляции и оценка Ревизора...")
                 runner = PolyglotTestRunner()
-                success, log = runner.run_tests(language="python", test_file_path="tests/my_test.py")
+                
+                # Receive dictionary response from runner
+                test_result = runner.run_tests(language="python", test_file_path="tests/my_test.py")
+                
+                success = test_result.get("success", False)
+                # Combine stdout and stderr for the logs
+                log = (test_result.get("stdout", "") + "\n" + test_result.get("stderr", "")).strip()
+                
                 state["compiler_output"] = log
 
                 if success:
