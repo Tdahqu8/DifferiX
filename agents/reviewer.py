@@ -61,7 +61,15 @@ def run_reviewer(state):
     result = json.loads(result_text)
     
     if not result["is_approved"]:
-        state["research_data"] += f"\n[Правка Ревизора]: {result['fix_instruction']}"
+        fix_instruction = result.get("fix_instruction", "")
+
+        if isinstance(state.get("research_data"), dict):
+            # If research_data is a dict, save the feedback under a key or update notes
+            state["research_data"]["reviewer_fix"] = fix_instruction
+        elif isinstance(state.get("research_data"), str):
+            state["research_data"] += f"\n[Правка Ревизора]: {fix_instruction}"
+        else:
+            state["research_data"] = f"[Правка Ревизора]: {fix_instruction}"
         state["current_step"] = "edit"
         state["iteration_count"] += 1
     else:
