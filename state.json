@@ -4,11 +4,10 @@
   "status": "in_progress",
   "priority": "critical",
   "goal": "Add three foundation capabilities to f(x): 1) auto-generated project structure file with fingerprint-based updates, 2) dangerous-code security filter before writing files, 3) logging of agent reasoning/thoughts (not only actions).",
-  "current_step": "research",
+  "current_step": "edit",
   "iteration_count": 0,
   "need_human": false,
   "warnings": [],
-
   "context": {
     "working_copy": "A clean duplicate of f(x) is the active project. Unrelated logs and extra tools were removed so agents focus only on this task.",
     "already_available": [
@@ -25,7 +24,6 @@
       "Generated code previously attempted dangerous file deletion via os/shutil"
     ]
   },
-
   "requirements": {
     "1_project_structure": {
       "create_tool": "tools/project_structure.py",
@@ -73,7 +71,6 @@
       ]
     }
   },
-
   "constraints": [
     "Do not implement Activation Score, sleep mode, Manager role, or semantic memory",
     "Do not refactor the whole system",
@@ -83,7 +80,6 @@
     "Prefer small functions and explicit file operations",
     "Do not use destructive file operations in generated tooling itself"
   ],
-
   "plan": [
     {
       "step": 1,
@@ -141,7 +137,6 @@
       ]
     }
   ],
-
   "definition_of_done": [
     "tools/project_structure.py exists and can generate PROJECT_STRUCTURE.md + structure_meta.json",
     "Structure file updates when files/folders change and stays unchanged when fingerprint is the same",
@@ -151,14 +146,149 @@
     "main.py integration works in order: structure -> edit -> security -> write -> test/build -> review",
     "A short smoke run completes without crash"
   ],
-
   "notes_for_agents": [
     "Researcher: produce a short technical plan with exact files to create/modify and function names. Use paths relative to project root.",
     "Editor: implement one concrete piece at a time. Keep code simple. Do not invent extra features outside requirements.",
     "Reviewer: approve only if real run/security logs support success. If structure/security integration is incomplete, return fix_instruction."
   ],
-
-  "research_data": "",
+  "research_data": {
+    "files_to_create": [
+      {
+        "path": "tools/project_structure.py",
+        "description": "Project structure scanner with fingerprint tracking",
+        "functions": [
+          {
+            "name": "generate_or_update_structure",
+            "signature": "generate_or_update_structure(project_path: str) -> dict",
+            "description": "Scans project root recursively, ignores junk folders, builds markdown tree, computes fingerprint (e.g., SHA256 of sorted file list + sizes + mtimes), writes PROJECT_STRUCTURE.md and structure_meta.json only if fingerprint changed. Returns dict with keys: updated (bool), fingerprint (str), file_count (int), structure_text (str)."
+          },
+          {
+            "name": "get_structure_text",
+            "signature": "get_structure_text(project_path: str) -> str",
+            "description": "Reads existing PROJECT_STRUCTURE.md if present and fingerprint matches current state; otherwise calls generate_or_update_structure and returns the structure text."
+          },
+          {
+            "name": "_compute_fingerprint",
+            "signature": "_compute_fingerprint(file_list: list[dict]) -> str",
+            "description": "Internal helper: computes stable hash from sorted list of {path, size, mtime}."
+          },
+          {
+            "name": "_build_tree_text",
+            "signature": "_build_tree_text(root: str, entries: list[dict]) -> str",
+            "description": "Internal helper: builds readable markdown tree from scanned entries."
+          }
+        ]
+      },
+      {
+        "path": "tools/security_filter.py",
+        "description": "Dangerous code pattern detector",
+        "functions": [
+          {
+            "name": "find_dangerous_code",
+            "signature": "find_dangerous_code(code: str) -> list[str]",
+            "description": "Returns list of matched dangerous patterns (strings). Patterns to detect (case-insensitive, regex): os\\.remove, os\\.unlink, shutil\\.rmtree, Path\\.unlink, os\\.system, subprocess\\.run.*shell\\s*=\\s*True, rm\\s+-rf, Remove-Item\\s+-Recurse, del\\s+/s, shutil\\.move.*\\.\\./, os\\.rename.*\\.\\./. Must not false-positive on comments or strings that are clearly documentation."
+          },
+          {
+            "name": "is_safe",
+            "signature": "is_safe(code: str) -> bool",
+            "description": "Convenience wrapper: returns True if find_dangerous_code returns empty list."
+          }
+        ]
+      },
+      {
+        "path": "tools/reasoning_logger.py",
+        "description": "Agent reasoning/thought logger (new file, not changelog_engine)",
+        "functions": [
+          {
+            "name": "log_reasoning",
+            "signature": "log_reasoning(agent_role: str, step: str, reasoning_data: dict, project_root: str) -> None",
+            "description": "Appends a reasoning record to status/last_thoughts.md (create dir if needed). Record format: timestamp, agent_role, step, and relevant fields: for Researcher -> analysis, plan; for Editor -> why, changes_summary; for Reviewer -> verdict, root_cause, fix_instruction, reasoning_summary. Also maintains a JSONL file status/reasoning_log.jsonl for machine parsing."
+          },
+          {
+            "name": "get_recent_thoughts",
+            "signature": "get_recent_thoughts(project_root: str, limit: int = 10) -> list[dict]",
+            "description": "Reads last N entries from reasoning_log.jsonl for context injection."
+          }
+        ]
+      },
+      {
+        "path": "tools/__init__.py",
+        "description": "Ensure tools package exports new modules",
+        "functions": []
+      }
+    ],
+    "files_to_modify": [
+      {
+        "path": "main.py",
+        "description": "Orchestrator integration",
+        "changes": [
+          {
+            "location": "imports",
+            "action": "Add imports: from tools.project_structure import generate_or_update_structure, get_structure_text; from tools.security_filter import find_dangerous_code, is_safe; from tools.reasoning_logger import log_reasoning"
+          },
+          {
+            "location": "run_cycle / main loop",
+            "action": "At start of each run: call generate_or_update_structure(project_path) and store structure_text. Pass structure_text into Researcher and Editor prompts/context."
+          },
+          {
+            "location": "after Editor returns code",
+            "action": "Call find_dangerous_code(editor_code). If hits: log security_output with hits, call log_reasoning for Editor with why='blocked by security filter', skip safe_write_code, proceed to Reviewer with security_output. If safe: proceed to safe_write_code, then build/test runner, then Reviewer."
+          },
+          {
+            "location": "each agent step (research, edit, review)",
+            "action": "After each agent completes, call log_reasoning with appropriate reasoning_data extracted from agent output (analysis/plan, why, verdict/root_cause/fix_instruction/reasoning_summary)."
+          }
+        ]
+      },
+      {
+        "path": "agents/researcher.py",
+        "description": "Ensure Researcher output includes analysis and plan fields for logging",
+        "changes": [
+          {
+            "location": "run method return",
+            "action": "Return dict with keys: analysis (str), plan (list[str]), context (str)."
+          }
+        ]
+      },
+      {
+        "path": "agents/editor.py",
+        "description": "Ensure Editor output includes why and changes_summary for logging",
+        "changes": [
+          {
+            "location": "run method return",
+            "action": "Return dict with keys: code (str), why (str), changes_summary (str)."
+          }
+        ]
+      },
+      {
+        "path": "agents/reviewer.py",
+        "description": "Ensure Reviewer output includes verdict, root_cause, fix_instruction, reasoning_summary for logging",
+        "changes": [
+          {
+            "location": "run method return",
+            "action": "Return dict with keys: verdict (str), root_cause (str), fix_instruction (str), reasoning_summary (str)."
+          }
+        ]
+      }
+    ],
+    "integration_order": [
+      "1. Create tools/project_structure.py with specified functions",
+      "2. Create tools/security_filter.py with specified functions",
+      "3. Create tools/reasoning_logger.py with specified functions",
+      "4. Update tools/__init__.py to export new modules",
+      "5. Modify agents/researcher.py, editor.py, reviewer.py to return required reasoning fields",
+      "6. Modify main.py to integrate structure generation, security check, and reasoning logging in the orchestrator flow"
+    ],
+    "testing_checklist": [
+      "Run generate_or_update_structure on current project -> verify PROJECT_STRUCTURE.md and structure_meta.json created",
+      "Modify a file, re-run -> verify fingerprint updates and files rewritten",
+      "Run again without changes -> verify no rewrite (updated=False)",
+      "Test security_filter with code containing os.remove, shutil.rmtree, rm -rf -> verify hits detected",
+      "Test security_filter with benign code -> verify empty hits",
+      "Run full orchestrator cycle -> verify status/last_thoughts.md contains entries for researcher, editor, reviewer with correct fields",
+      "Verify security block flow: submit dangerous code -> verify file not written, security_output logged, reviewer receives log"
+    ]
+  },
   "generated_code": {},
   "compiler_output": "",
   "security_output": ""

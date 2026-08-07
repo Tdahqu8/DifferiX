@@ -207,21 +207,17 @@ class OrchestratorConsole:
                     self.update_costs(meta)
                 except Exception as e:
                     print(f"❌ Ошибка Editor: {e}")
-                    # Можно увеличить счётчик и уйти в паузу/повтор
                     state["iteration_count"] = state.get("iteration_count", 0) + 1
                     self.save_state(state)
                     continue
-                state, meta = run_editor(state, project_files)
-                self.update_costs(meta)
 
+                # Process generated code from the single run_editor call
                 generated = state.get("generated_code", {})
                 res_file = generated.get("target_file")
                 res_code = generated.get("code")
 
                 print(f"📄 target_file: {res_file}")
                 print(f"📝 code type: {type(res_code)}, length: {len(str(res_code)) if res_code is not None else 0}")
-
-                # нормализация code → str (как делали раньше)
                 if isinstance(res_code, dict):
                     res_code = (
                         res_code.get("content")
@@ -247,13 +243,9 @@ class OrchestratorConsole:
                     old_code = ""
                 elif not isinstance(old_code, str):
                     old_code = str(old_code) if old_code is not None else ""
-
                 print("🔍 Строю diff...")
                 current_diff = self.logger.generate_diff(old_code, res_code, res_file)
-
                 print("💾 Записываю файл...")
-                print(self.sandbox.safe_write_code(res_file, res_code))
-
                 self.save_state(state)
                 print("✅ Шаг Editor завершён, переходим дальше")
 
@@ -416,7 +408,6 @@ class OrchestratorConsole:
 
             else:
                 print("Неизвестная команда. Введи help.")
-
 
 if __name__ == "__main__":
     OrchestratorConsole().start()
