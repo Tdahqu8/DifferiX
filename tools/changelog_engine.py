@@ -51,16 +51,23 @@ class ChangelogEngine:
         if log_dir and not os.path.exists(log_dir):
             os.makedirs(log_dir, exist_ok=True)
 
-        # 2. Безопасно читаем существующую историю или создаем новый список
-        history = []
+        # 2. Читаем существующий JSON
+        data = {}
         if os.path.exists(self.log_filepath):
             try:
                 with open(self.log_filepath, "r", encoding="utf-8") as f:
-                    history = json.load(f)
+                    loaded = json.load(f)
+                    if isinstance(loaded, dict):
+                        data = loaded
+                    elif isinstance(loaded, list):
+                        data = {"iterations": loaded}
             except (json.JSONDecodeError, FileNotFoundError):
-                history = []
+                data = {}
 
-        # 3. Формируем запись итеракции
+        if "iterations" not in data or not isinstance(data["iterations"], list):
+            data["iterations"] = []
+
+        # 3. Формируем запись итерации
         new_entry = {
             "iteration": state.get("iteration_count", 0),
             "step": state.get("current_step"),
@@ -68,8 +75,8 @@ class ChangelogEngine:
             "review": state.get("review_result"),
             "diff": diff_data
         }
-        history.append(new_entry)
+        data["iterations"].append(new_entry)
 
         # 4. Перезаписываем файл
         with open(self.log_filepath, "w", encoding="utf-8") as f:
-            json.dump(history, f, ensure_ascii=False, indent=2)
+            json.dump(data, f, ensure_ascii=False, indent=2)
