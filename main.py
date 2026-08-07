@@ -1,13 +1,11 @@
 import json
 import os
-import sys
 from datetime import datetime
 
 import config
 from dotenv import load_dotenv
 
 from tools.file_manager import FolderSandbox
-from tools.compiler import run_universal_build
 from tools.backup_manager import (
     get_repo,
     make_auto_commit,
@@ -16,11 +14,13 @@ from tools.backup_manager import (
     create_success_tag,
 )
 from tools.changelog_engine import ChangelogEngine
-from tools.project_scanner import get_project_files
+from tools.project_scanner import get_workspace_context
 
 from agents.researcher import run_researcher
 from agents.editor import run_editor
 from agents.reviewer import run_reviewer
+
+from tools.compiler import PolyglotTestRunner
 
 load_dotenv()
 
@@ -58,16 +58,16 @@ class OrchestratorConsole:
         print(
             """
 Доступные команды:
-  run / start         — запустить цикл агентов
-  pause               — прервать цикл после текущего шага + показать changelog
-  stop                — полностью остановить цикл
-  status              — текущий статус
-  log / changelog     — показать летопись текущей сессии
-  warn low|mid|high   — выдать предупреждение агентам
-  rollback            — откат к выбранному коммиту
-  history / commits   — список ВСЕХ git-коммитов
-  help                — эта справка
-  exit / quit         — выход
+    run / start         — запустить цикл агентов
+    pause               — прервать цикл после текущего шага + показать changelog
+    stop                — полностью остановить цикл
+    status              — текущий статус
+    log / changelog     — показать летопись текущей сессии
+    warn low|mid|high   — выдать предупреждение агентам
+    rollback            — откат к выбранному коммиту
+    history / commits   — список ВСЕХ git-коммитов
+    help                — эта справка
+    exit / quit         — выход
 """
         )
 
@@ -168,7 +168,7 @@ class OrchestratorConsole:
                 break
 
             state = self.load_state()
-            project_files = get_project_files(self.proj["path"])
+            project_files = get_workspace_context(root_dir = ".")
 
             # Предохранитель по итерациям и бюджету
             if (
@@ -293,7 +293,8 @@ class OrchestratorConsole:
 
             elif state.get("current_step") == "review":
                 print("\n• [Шаг 3]: Запуск компиляции и оценка Ревизора...")
-                success, log = run_universal_build(self.proj["path"], self.proj["lang"])
+                runner = PolyglotTestRunner()
+                success, log = runner.run_tests(language="python", test_file_path="tests/my_test.py")
                 state["compiler_output"] = log
 
                 if success:
