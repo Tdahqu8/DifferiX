@@ -284,48 +284,61 @@ class OrchestratorConsole:
                 self.save_state(state)
 
             elif state.get("current_step") == "review":
-                print("\n• [Шаг 3]: Запуск компиляции и оценка Ревизора...")
-                runner = PolyglotTestRunner()
-                
-                # Receive dictionary response from runner
-                test_result = runner.run_tests(language="python", test_file_path="tests/my_test.py")
-                
-                success = test_result.get("success", False)
-                # Combine stdout and stderr for the logs
-                log = (test_result.get("stdout", "") + "\n" + test_result.get("stderr", "")).strip()
-                
-                state["compiler_output"] = log
+                        print("\n• [Шаг 3]: Запуск компиляции и оценка Ревизора...")
 
-                if success:
-                    print(f"🎉 СИНТАКСИС ИДЕАЛЕН! Код успешно собран.\n{log}")
-                    state["current_step"] = "done"
-                    self.save_state(state)
+            # 1. Достаем абсолютный путь к целевому проекту из config/state
+            # (Работает для текущего выбранного проекта в оркестраторе)
+            project_path = self.current_project.get("path") if hasattr(self, "current_project") else state.get("project_path", "")
+            
+            # 2. Формируем АБСОЛЮТНЫЙ путь к файлу тестов
+            test_file_path = os.path.join(project_path, "tests", "my_test.py")
 
-                    # Коммит только при успехе
-                    try:
-                        repo = get_repo()
-                        make_auto_commit(
-                            repo, "orchestrator", "Success after debugging"
-                        )
-                        create_success_tag(repo)
-                    except Exception as e:
-                        print(f"Не удалось сделать success-коммит: {e}")
+            # 3. Фолбэк: Если файла my_test.py нет, передаем всю папку tests/
+            if not os.path.exists(test_file_path):
+                test_file_path = os.path.join(project_path, "tests")
 
-                    self.logger.record_iteration(state, diff_data=current_diff)
-                    print("\n🏁 ИИ завершил работу. Можно тестировать логику вручную.")
-                    break
-                else:
-                    # Ревизор разбирает ошибку
+            # 4. Запуск PolyglotTestRunner с передачей абсолютного пути
+            runner = PolyglotTestRunner()
+            test_result = runner.run_tests(language="python", test_file_path=test_file_path)
+            
+            success = test_result.get("success", False)
+            log = (test_result.get("stdout", "") + "\n" + test_result.get("stderr", "")).strip()
+            state["compiler_output"] = log
+
+            if success:
+                print(f"🎉 СИНТАКСИС ИДЕАЛЕН! Код успешно собран.\n{log}")
+                state["current_step"] = "done"
+                self.save_state(state)
+
+                try:
+                    repo = get_repo()
+                    make_auto_commit(repo, "orchestrator", "Success after debugging")
+                    create_success_tag(repo)
+                except Exception as e:
+                    print(f"Не удалось сделать success-коммит: {e}")
+
+                self.logger.record_iteration(state, diff_data=current_diff)
+                print("\n🏁 ИИ завершил работу. Можно тестировать логику вручную.")
+                break
+            else:
+                # Безопасный вызов Ревизора (при сбоях API оркестратор не упадет)
+                try:
                     state, meta = run_reviewer(state)
                     self.update_costs(meta)
+                except Exception as e:
+                    print(f"❌ Ошибка Reviewer: {e}")
+                    state["iteration_count"] = state.get("iteration_count", 0) + 1
+                    state["current_step"] = "edit"
                     self.save_state(state)
-                    self.logger.record_iteration(state, diff_data=current_diff)
+                    continue
 
-            else:
-                print(
-                    f"Неизвестный или завершённый шаг: {state.get('current_step')}. Выход из цикла."
-                )
-                break
+                self.save_state(state)
+                self.logger.record_iteration(state, diff_data=current_diff)
+
+        else:
+            print(
+                f"Неизвестный или завершённый шаг: {state.get('current_step')}. Выход из цикла."
+            )
 
     def start(self):
         print("====== 🤖 f(x) Orchestrator ======")
