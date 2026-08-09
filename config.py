@@ -3,16 +3,20 @@ from dotenv import load_dotenv
 load_dotenv() # Подгружает .env автономом прямо внутри конфига
 
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY") or os.getenv("GEMINI_API_KEY")
-OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+# OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
-# Heavy reasoning for deep repository research
-MODEL_RESEARCHER = "nvidia/nemotron-3-ultra-550b-a55b:free"
+# # Heavy reasoning for deep repository research
+# MODEL_RESEARCHER = "nvidia/nemotron-3-ultra-550b-a55b:free"
 
-# Strongest free instruction-following model currently available in your list
-MODEL_EDITOR = "google/gemma-4-26b-a4b-it:free"
+# # Strongest free instruction-following model currently available in your list
+# MODEL_EDITOR = "google/gemma-4-26b-a4b-it:free"
 
-# Reasoning model for catching edge cases and logic bugs
-MODEL_REVIEWER = "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
+# # Reasoning model for catching edge cases and logic bugs
+# MODEL_REVIEWER = "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
+OPENROUTER_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
+MODEL_RESEARCHER = "gemini-1.5-flash"
+MODEL_EDITOR = "gemini-1.5-flash"
+MODEL_REVIEWER = "gemini-1.5-flash"
 
 # Цены (для бесплатного тарифа 0)
 PRICE_INPUT_1M = 0.0
