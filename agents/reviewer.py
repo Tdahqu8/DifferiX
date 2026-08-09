@@ -47,36 +47,59 @@ def run_reviewer(state):
 - should_create_observation обычно false
 - reasoning_summary всё равно обязателен"""
 
+    # 1. Обрезаем context, чтобы не перегружать окно модели лишним мусором
+    compiler_log = str(state.get("compiler_output", ""))
+    pruned_state = {
+        "iteration_count": state.get("iteration_count", 0),
+        "compiler_output": compiler_log[-3000:] if len(compiler_log) > 3000 else compiler_log,  # берем хвост лога
+        "generated_code": state.get("generated_code"),
+        "research_data": state.get("research_data"),
+        "warnings": state.get("warnings", [])
+    }
+
+    # 2. Вызов API с гарантированным запасом токенов
     response = client.chat.completions.create(
         model=config.MODEL_REVIEWER,
         messages=[
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": f"State: {json.dumps(state, ensure_ascii=False)}"}
+            {"role": "user", "content": f"State: {json.dumps(pruned_state, ensure_ascii=False)}"}
         ],
         response_format={"type": "json_object"},
-        temperature=0.1
+        temperature=0.1,
+        max_tokens=2048
     )
     
-    # 1. Проверка существования choices
+    # 3. Валидация ответа API
     if not response or not getattr(response, "choices", None) or len(response.choices) == 0:
         raise RuntimeError("Reviewer: модель вернула пустой ответ или response.choices == None")
 
-    # 2. Безопасное извлечение message и content
     first_choice = response.choices[0]
     if not first_choice or not getattr(first_choice, "message", None):
         raise RuntimeError("Reviewer: отсутствует message в ответе модели")
 
-    result_text = first_choice.message.content or ""
-    if not result_text.strip():
+    result_text = (first_choice.message.content or "").strip()
+    if not result_text:
         raise RuntimeError("Reviewer: модель вернула пустую строку content")
 
-    # 3. Безопасный парсинг JSON
+    # 4. Безопасный парсинг JSON с восстановлением (json_repair) и фоллбеком
+    result = None
     try:
         result = json.loads(result_text)
-    except json.JSONDecodeError as e:
-        raise RuntimeError(f"Reviewer: не удалось разобрать JSON от модели: {e}\nRaw output: {result_text[:200]}")
-    
-    # 4. Обработка вердикта
+    except json.JSONDecodeError:
+        try:
+            import json_repair
+            result = json_repair.loads(result_text)
+            print("⚠️ [Reviewer]: Обнаружен невалидный JSON, успешно восстановлен через json_repair.")
+        except Exception:
+            print("⚠️ [Reviewer]: Модель обрезала ответ. Выполняем мягкий откат на шаг редактирования.")
+            result = {
+                "is_approved": False,
+                "verdict": "Ошибка формата ответа Ревизора (JSON был обрезан)",
+                "root_cause": "Модель превысила лимит генерации или оборвала ответ на середине.",
+                "fix_instruction": "Произошла ошибка парсинга ответа проверки. Повтори попытку или проверь синтаксис файла."
+            }
+
+    # 5. Обработка вердикта и маршрутизация состояния
     if not result.get("is_approved", False):
         fix_instruction = result.get("fix_instruction", "")
 
@@ -94,7 +117,7 @@ def run_reviewer(state):
         state["review_result"] = result
         state["current_step"] = "done"
         
-    # 5. Безопасное извлечение токенов
+    # 6. Извлечение токенов
     usage = getattr(response, "usage", None)
     prompt_tokens = getattr(usage, "prompt_tokens", 0) if usage else 0
     completion_tokens = getattr(usage, "completion_tokens", 0) if usage else 0
@@ -104,4 +127,4 @@ def run_reviewer(state):
         'candidates_token_count': completion_tokens
     })
     
-    return state, usage_meta    
+    return state, usage_meta
