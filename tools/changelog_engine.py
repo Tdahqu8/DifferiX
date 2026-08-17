@@ -26,7 +26,7 @@ class ChangelogEngine:
                 json.dump(initial_data, f, indent=2, ensure_ascii=False)
 
     def generate_diff(self, old_text: str, new_text: str, filename: str) -> dict:
-        """Считает точный дифференциал изменений"""
+        """Calculating differential of edits"""
         old_lines = old_text.splitlines(keepends=True)
         new_lines = new_text.splitlines(keepends=True)
         
@@ -35,23 +35,20 @@ class ChangelogEngine:
         added = sum(1 for line in diff if line.startswith('+') and not line.startswith('+++'))
         removed = sum(1 for line in diff if line.startswith('-') and not line.startswith('---'))
         
-        # Ограничиваем срез диффа для компактности
         clean_diff = "".join(diff[:40])
         
         return {
             "file": filename,
             "lines_added": added,
             "lines_removed": removed,
-            "unified_diff": clean_diff if clean_diff else "Файл создан с нуля / Без изменений"
+            "unified_diff": clean_diff if clean_diff else "File created from zero/no diffs"
         }
 
     def record_iteration(self, state, diff_data=""):
-        # 1. Гарантируем, что папка для логов существует
         log_dir = os.path.dirname(self.log_filepath)
         if log_dir and not os.path.exists(log_dir):
             os.makedirs(log_dir, exist_ok=True)
 
-        # 2. Читаем существующий JSON
         data = {}
         if os.path.exists(self.log_filepath):
             try:
@@ -67,7 +64,6 @@ class ChangelogEngine:
         if "iterations" not in data or not isinstance(data["iterations"], list):
             data["iterations"] = []
 
-        # 3. Формируем запись итерации
         new_entry = {
             "iteration": state.get("iteration_count", 0),
             "step": state.get("current_step"),
@@ -77,6 +73,5 @@ class ChangelogEngine:
         }
         data["iterations"].append(new_entry)
 
-        # 4. Перезаписываем файл
         with open(self.log_filepath, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)

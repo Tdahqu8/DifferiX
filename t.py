@@ -2,20 +2,18 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 
-# 1. СНАЧАЛА подгружаем .env
 env_path = Path(__file__).resolve().parent / '.env'
 load_dotenv(dotenv_path=env_path)
 
-# 2. И ТОЛЬКО ПОТОМ импортируем config!
 import config
 from openai import OpenAI
 
 api_key = config.OPENROUTER_API_KEY
 
-print(f"🔑 Проверяем ключ OpenRouter из config: {'НАЙДЕН' if api_key else '❌ НЕ НАЙДЕН'}")
+print(f"Checking API key: {'FOUND' if api_key else 'NOT FOUND'}")
 
 if not api_key:
-    print("⚠️ Ошибка: Ключ не найден.")
+    print("Error: API key not found")
     exit(1)
 
 client = OpenAI(
@@ -23,18 +21,18 @@ client = OpenAI(
     api_key=api_key,
 )
 
-print(f"📡 Отправляем тестовый запрос к модели: {config.MODEL_REVIEWER}...")
+print(f"Sending test message to LLM: {config.MODEL_REVIEWER}...")
 
 try:
     completion = client.chat.completions.create(
         model=config.MODEL_RESEARCHER,
         messages=[
-            {"role": "user", "content": "Ответь одним словом: Работает?"}
+            {"role": "user", "content": "Write only 1 word if you can read it."}
         ]
     )
     
     answer = completion.choices[0].message.content
-    print(f"\n🎉 ЕЕЕЕ! УСПЕХ! Ответ от OpenRouter ({config.MODEL_RESEARCHER}): {answer.strip()}")
+    print(f"\nLLM returned an answer successfully ({config.MODEL_RESEARCHER}): {answer.strip()}")
 
 except Exception as e:
-    print(f"\n❌ ОШИБКА ПОДКЛЮЧЕНИЯ ИЛИ КЛЮЧА:\n{e}")
+    print(f"\nConnection or API key error: \n{e}")

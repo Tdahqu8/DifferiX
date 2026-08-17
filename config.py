@@ -18,13 +18,13 @@ MAX_ITERATIONS = 5
 MAX_BUDGET_USD = 1.0
 
 PROJECTS = {
-    "1": {
-        "name": "Victorian Overhaul",
-        "path": r"C:\Program Files (x86)\Steam\steamapps\common\RimWorld\Mods\Victorian overhaul",
-        "lang": "csharp",
-    },
+    # "1": {
+    #     "name": "Victorian Overhaul",
+    #     "path": r"C:\Program Files (x86)\Steam\steamapps\common\RimWorld\Mods\Victorian overhaul",
+    #     "lang": "csharp",
+    # },
     "2": {
-        "name": "Function 1.1",
+        "name": "Function",
         "path": r"C:\projects-py\function_1.1",
         "lang": "python",
     },

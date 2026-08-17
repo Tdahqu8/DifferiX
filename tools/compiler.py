@@ -30,11 +30,11 @@ class PolyglotTestRunner:
         "cpp": {
             "test_dir": "tests",
             "file_ext": "_test.cpp",
-            "cmd": lambda test_file: ["ctest", "--output-on-failure"] # or custom binary run
+            "cmd": lambda test_file: ["ctest", "--output-on-failure"]
         }
     }
 
-    def run_tests(self, language: str, test_file_path: str, timeout: int = 15) -> Dict[str, Any]:
+    def run_universal_build(self, language: str, test_file_path: str, timeout: int = 15) -> Dict[str, Any]:
         lang = language.lower()
         if lang not in self.CONFIGS:
             return {"success": False, "error": f"Unsupported language: {language}"}
@@ -69,3 +69,31 @@ class PolyglotTestRunner:
                 "stdout": "",
                 "stderr": f"Required test runner tool binary not found in system PATH: {str(e)}"
             }
+
+
+def run_universal_build(project_path: str, language: str, target_file: str = "") -> tuple[bool, str]:
+    """
+    Top-level wrapper expected by main.py.
+    Unpacks PolyglotTestRunner result into a (success, log) tuple.
+    """
+    runner = PolyglotTestRunner()
+
+    if not target_file:
+        lang_cfg = runner.CONFIGS.get(language.lower(), {})
+        test_dir = lang_cfg.get("test_dir", "tests")
+        target_file = os.path.join(project_path, test_dir)
+
+    res = runner.run_universal_build(language=language, test_file_path=target_file)
+
+    success = res.get("success", False)
+    stdout = res.get("stdout", "")
+    stderr = res.get("stderr", "")
+    error = res.get("error", "")
+
+    log = stdout
+    if stderr:
+        log += f"\n[STDERR]\n{stderr}"
+    if error:
+        log += f"\n[ERROR]\n{error}"
+
+    return success, log.strip()

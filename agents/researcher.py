@@ -13,26 +13,26 @@ def load_lessons(project_name):
         return ""
     with open("lessons_learned.json", "r", encoding="utf-8") as f:
         lessons = json.load(f)
-    rules = [f"- ПРАВИЛО: {l['rule_to_prevent']}" for l in lessons if project_name in l['context']]
-    return "\n⚠️ ОШИБКИ ИЗ ПРОШЛОГО И УРОКИ:\n" + "\n".join(rules) if rules else ""
+    rules = [f"- RULE: {l['rule_to_prevent']}" for l in lessons if project_name in l['context']]
+    return "\nPAST ERRORS AND LESSONS LEARNED:\n" + "\n".join(rules) if rules else ""
 
 def run_researcher(state, project_name, project_files=""):
     lessons_context = load_lessons(project_name)
     
-    system_prompt = f"""Ты — ИИ-Исследователь. Твоя цель — изучить задачу из state.json и составить технический план для Редактора.
-Используй только проверенные методы API. Не выдумывай синтаксис.
+    system_prompt = f"""You are the AI Researcher. Your goal is to study the task from state.json and formulate a technical plan for the Editor.
+Use only verified API methods. Do not invent syntax.
 {lessons_context}
 
-Файлы проекта:
+Project files:
 {project_files}
 
-Выведи СТРОГО JSON с ключами "analysis" и "technical_plan"."""
+Output STRICTLY JSON with keys "analysis" and "technical_plan"."""
 
     response = client.chat.completions.create(
         model=config.MODEL_RESEARCHER,
         messages=[
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": f"Текущий state: {json.dumps(state, ensure_ascii=False)}"}
+            {"role": "user", "content": f"Current state: {json.dumps(state, ensure_ascii=False)}"}
         ],
         response_format={"type": "json_object"},
         temperature=0.1

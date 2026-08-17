@@ -1,4 +1,4 @@
-# tests/my_test.py
+
 import pytest
 from tools.project_scanner import get_workspace_context
 def test_sanity_check():
