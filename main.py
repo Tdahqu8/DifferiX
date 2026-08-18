@@ -2,9 +2,16 @@ import json
 import os
 import sys
 from datetime import datetime
+from dotenv import load_dotenv
+
+from rich.console import Console
+from rich.panel import Panel
+from rich.table import Table
+from rich.markdown import Markdown
+
+console = Console()
 
 import config
-from dotenv import load_dotenv
 
 from tools.file_manager import FolderSandbox
 from tools.compiler import run_universal_build
@@ -42,11 +49,20 @@ class OrchestratorConsole:
             meta.candidates_token_count * (config.PRICE_OUTPUT_1M / 1_000_000)
         )
         self.total_cost += cost
-        print(
-            f"[Тokens per step]: Input: {meta.prompt_token_count} | "
-            f"Output: {meta.candidates_token_count} | Cost: ${cost:.5f}"
+        
+        table = Table(show_header=True, header_style="bold blue", box=None)
+        table.add_column("Input Tokens", justify="right")
+        table.add_column("Output Tokens", justify="right")
+        table.add_column("Step Cost", justify="right", style="green")
+        table.add_column("Session Total", justify="right", style="bold green")
+        
+        table.add_row(
+            f"{meta.prompt_token_count:,}",
+            f"{meta.candidates_token_count:,}",
+            f"${cost:.5f}",
+            f"${self.total_cost:.5f}"
         )
-        print(f"[Overall session bill]: ${self.total_cost:.5f}")
+        console.print(table)
 
     def load_state(self):
         with open("state.json", "r", encoding="utf-8") as f:
@@ -57,40 +73,47 @@ class OrchestratorConsole:
             json.dump(state, f, indent=2, ensure_ascii=False)
 
     def print_help(self):
-        print(
-            """
-Available commands:
-    run / start         — run agent cycle
-    pause               — break cycle + show changelog
-    stop                — stop cycle
-    status              — current status
-    log / changelog     — show current session log
-    warn low|mid|high   — warn an agent
-    rollback            — rollback to selected git commit
-    history / commits   — all git commits list
-    help                — all availabe commands
-    exit / quit         — exit from f(x) terminal
+        help_text = """
+[bold cyan]Available Commands:[/bold cyan]
+  [yellow]run / start[/yellow]         - Execute the main agent iteration cycle
+  [yellow]pause[/yellow]               - Pause execution and view recent changelogs
+  [yellow]stop[/yellow]                - Halt the active agent cycle
+  [yellow]status[/yellow]              - Display current workflow state and system metrics
+  [yellow]log / changelog[/yellow]     - Render session changelog summaries
+  [yellow]warn low|mid|high[/yellow]   - Issue an explicit warning instruction to agents
+  [yellow]rollback[/yellow]            - Revert repository to a target Git commit SHA
+  [yellow]history / commits[/yellow]   - Display full version control commit log
+  [yellow]help[/yellow]                - Show command directory
+  [yellow]exit / quit[/yellow]         - Terminate the orchestrator session
 """
-        )
+        console.print(Panel(help_text.strip(), title="System Help", border_style="cyan"))
 
     def show_status(self):
         try:
             state = self.load_state()
-            print("\n--- STATUS ---")
-            print(f"Current step:  {state.get('current_step')}")
-            print(f"Iteration:     {state.get('iteration_count')}")
-            print(f"Goal:          {str(state.get('goal', '—'))[:80]}")
-            print(f"Last build:    {str(state.get('compiler_output', '—'))[:120]}")
-            print(f"need_human:    {state.get('need_human', False)}")
-            print(f"Warnings:      {len(state.get('warnings', []))}")
-            print("---------------")
+            table = Table(title="System Status", show_header=False, border_style="blue")
+            table.add_column("Property", style="bold yellow")
+            table.add_column("Value", style="white")
+
+            table.add_row("Current Step", str(state.get("current_step", "N/A")).upper())
+            table.add_row("Iteration Count", str(state.get("iteration_count", 0)))
+            table.add_row("Active Goal", str(state.get("goal", "N/A")))
+            table.add_row("Human Assistance Required", str(state.get("need_human", False)))
+            table.add_row("Active Warnings", str(len(state.get("warnings", []))))
+            
+            compiler_out = str(state.get("compiler_output", "N/A"))
+            if len(compiler_out) > 120:
+                compiler_out = compiler_out[:120] + "..."
+            table.add_row("Last Compiler Output", compiler_out)
+
+            console.print(table)
         except Exception as e:
-            print(f"Failed to read the state: {e}")
+            console.print(f"[bold red]Failed to load state file:[/bold red] {e}")
 
     def show_changelog(self):
         log_dir = "./iteration_logs"
         if not os.path.exists(log_dir):
-            print("Error: iteration_logs blank.")
+            console.print("[bold red]Error:[/bold red] The directory 'iteration_logs' does not exist.")
             return
 
         files = sorted(
@@ -98,40 +121,41 @@ Available commands:
             reverse=True,
         )
         if not files:
-            print("No summary files.")
+            console.print("[bold yellow]Notice:[/bold yellow] No summary logs found in directory.")
             return
 
         latest = files[0]
         path = os.path.join(log_dir, latest)
-        print(f"\n--- Changelog: {latest} ---")
+        
         with open(path, "r", encoding="utf-8") as f:
             content = f.read()
-            print(content[:4000])
             if len(content) > 4000:
-                print("\n... (cut)")
-        print("--- end ---")
+                content = content[:4000] + "\n\n...[content truncated]"
+
+        console.print(Panel(Markdown(content), title=f"Changelog: {latest}", border_style="magenta"))
 
     def run_agent_cycle(self):
         if not self.proj or not self.sandbox or not self.logger:
-            print("Project wasn't chosen")
+            console.print("[bold red]Error:[/bold red] No project selected. Please select a project first.")
             return
 
-        print("\nRunning agent cycle...")
+        console.print(Panel("[bold green]Starting multi-agent execution pipeline...[/bold green]", border_style="green"))
         current_diff = None
         self.should_pause = False
         self.should_stop = False
 
-        struct_res = generate_or_update_structure(self.proj["path"])
-        print(f"Project structure updated. (Files: {struct_res['file_count']})")
+        with console.status("[bold blue]Updating project file structure tree...", spinner="dots"):
+            struct_res = generate_or_update_structure(self.proj["path"])
+        console.print(f"[green]Project structure synchronized.[/green] Total tracked files: [yellow]{struct_res['file_count']}[/yellow]")
 
         while True:
             if self.should_stop:
-                print("⏹ Cycle stopped by the user.")
+                console.print("[bold red]Execution stopped by operator.[/bold red]")
                 self.should_stop = False
                 break
 
             if self.should_pause:
-                print("⏸ CYcle paused. Showing changelog:")
+                console.print("[bold yellow]Execution paused by operator. Displaying recent changelog...[/bold yellow]")
                 self.show_changelog()
                 self.should_pause = False
                 break
@@ -143,8 +167,14 @@ Available commands:
                 state.get("iteration_count", 0) >= config.MAX_ITERATIONS
                 or self.total_cost >= config.MAX_BUDGET_USD
             ):
-                print("\n The agents have stopped their workflow to save tokens.")
-                cmd = input("\n Command ([C]continue / [S]stop / [Enter] exit): ").strip().lower()
+                console.print(
+                    Panel(
+                        "[bold red]Resource Threshold Reached![/bold red]\n"
+                        "Execution paused to protect iteration limits and token budget.",
+                        border_style="red"
+                    )
+                )
+                cmd = console.input("[yellow]Select Action ([C]ontinue / [S]top): [/yellow]").strip().lower()
                 if cmd == "c":
                     state["iteration_count"] = 0
                     self.save_state(state)
@@ -154,11 +184,13 @@ Available commands:
 
             # ----------------- 1. RESEARCH -----------------
             if state.get("current_step") == "research":
-                print("\n• [Step No. 1]: Researcher build the plan...")
-                state, meta = run_researcher(state, self.proj["name"], project_files)
+                console.rule("[bold cyan]Step 1: Research and Planning[/bold cyan]")
+                
+                with console.status("[cyan]Researcher agent generating technical plan...", spinner="dots"):
+                    state, meta = run_researcher(state, self.proj["name"], project_files)
+                
                 self.update_costs(meta)
 
-                # Логируем мысли Исследователя
                 research_data = state.get("research_data", {})
                 log_reasoning("researcher", "research", {
                     "analysis": research_data.get("analysis") if isinstance(research_data, dict) else str(research_data),
@@ -167,14 +199,16 @@ Available commands:
 
                 self.save_state(state)
 
-            # ----------------- 2: EDIT -----------------
+            # ----------------- 2. EDIT -----------------
             elif state.get("current_step") == "edit":
-                print("\n• [Step 2]: Editor writing code...")
+                console.rule("[bold yellow]Step 2: Code Generation[/bold yellow]")
+                
                 try:
-                    state, meta = run_editor(state, project_files)
+                    with console.status("[yellow]Editor agent writing source code...", spinner="dots"):
+                        state, meta = run_editor(state, project_files)
                     self.update_costs(meta)
                 except Exception as e:
-                    print(f"Editor error: {e}")
+                    console.print(f"[bold red]Editor Execution Error:[/bold red] {e}")
                     state["iteration_count"] = state.get("iteration_count", 0) + 1
                     self.save_state(state)
                     continue
@@ -191,11 +225,10 @@ Available commands:
                     res_code = str(res_code or "")
 
                 if not res_file:
-                    print("Editor haven't chosed target_file")
+                    console.print("[bold red]Editor Error:[/bold red] No target file specified in output.")
                     self.save_state(state)
                     continue
 
-                # Логируем мысли Редактора
                 log_reasoning("editor", "edit", {
                     "target_file": res_file,
                     "why": generated.get("why", "Planned edits implementation"),
@@ -204,8 +237,9 @@ Available commands:
 
                 danger_hits = find_dangerous_code(res_code)
                 if danger_hits:
-                    print(f"[SECURITY BLOCK]: Dangerous code patterns detected: {danger_hits}")
-                    state["compiler_output"] = f"SECURITY_ERROR: Edit rejected. Dangerous code: {', '.join(danger_hits)}"
+                    msg = f"Forbidden security patterns detected: {', '.join(danger_hits)}"
+                    console.print(Panel(msg, title="Security Interceptor Warning", border_style="bold red"))
+                    state["compiler_output"] = f"SECURITY_ERROR: Edit rejected. {msg}"
                     state["current_step"] = "review"
                     self.save_state(state)
                     continue
@@ -215,19 +249,23 @@ Available commands:
                     old_code = ""
 
                 current_diff = self.logger.generate_diff(str(old_code), res_code, res_file)
-                print(self.sandbox.safe_write_code(res_file, res_code))
+                write_result = self.sandbox.safe_write_code(res_file, res_code)
+                console.print(f"[green]File Write Result:[/green] {write_result}")
 
                 state["current_step"] = "review"
                 self.save_state(state)
 
-            # ----------------- 3: REVIEW -----------------
+            # ----------------- 3. REVIEW -----------------
             elif state.get("current_step") == "review":
-                print("\n• [Шаг 3]: Compilation and reviewer's review...")
-                success, log = run_universal_build(self.proj["path"], self.proj["lang"])
+                console.rule("[bold magenta]Step 3: Build Verification and Review[/bold magenta]")
+                
+                with console.status("[magenta]Running universal test environment runner...", spinner="dots"):
+                    success, log = run_universal_build(self.proj["path"], self.proj["lang"])
+                
                 state["compiler_output"] = log
 
                 if success:
-                    print(f"Code built successfully.\n{log}")
+                    console.print(Panel(log, title="Build/Test Log - Success", border_style="bold green"))
                     state["current_step"] = "done"
                     self.save_state(state)
 
@@ -236,13 +274,17 @@ Available commands:
                         make_auto_commit(repo, "orchestrator", "Success after debugging")
                         create_success_tag(repo)
                     except Exception as e:
-                        print(f"Failed to create success-commit: {e}")
+                        console.print(f"[bold red]Git Checkpoint Error:[/bold red] {e}")
 
                     self.logger.record_iteration(state, diff_data=current_diff)
-                    print("\nAgents have finished their job.")
+                    console.print(Panel("[bold green]All workflow steps completed successfully.[/bold green]", border_style="green"))
                     break
                 else:
-                    state, meta = run_reviewer(state)
+                    console.print(Panel(log, title="Build/Test Log - Failed", border_style="bold red"))
+                    
+                    with console.status("[magenta]Reviewer agent diagnosing failure...", spinner="dots"):
+                        state, meta = run_reviewer(state)
+                    
                     self.update_costs(meta)
 
                     rev_res = state.get("review_result", {})
@@ -257,26 +299,43 @@ Available commands:
                     self.logger.record_iteration(state, diff_data=current_diff)
 
             else:
-                print(f"Step finished or unknown: {state.get('current_step')}.")
+                console.print(f"[bold yellow]Pipeline finished or invalid step encountered:[/bold yellow] {state.get('current_step')}")
                 break
 
     def start(self):
-        print("====== f(x) Orchestrator ======")
-        print("Select a project:")
-        for k, v in config.PROJECTS.items():
-            print(f"{k}) {v['name']} ({v['lang']})")
+        console.clear()
+        console.print(
+            Panel(
+                "[bold cyan]f(x) Autonomous Multi-Agent Orchestrator[/bold cyan]\n"
+                "[dim]Interactive Terminal Interface[/dim]",
+                border_style="cyan",
+                expand=False
+            )
+        )
+        
+        table = Table(title="Available Projects", show_header=True, header_style="bold green")
+        table.add_column("Key", justify="center", style="bold yellow")
+        table.add_column("Project Name", style="white")
+        table.add_column("Target Language", style="cyan")
 
-        choice = input("Write project number: ").strip()
+        for k, v in config.PROJECTS.items():
+            table.add_row(k, v["name"], v["lang"])
+
+        console.print(table)
+
+        choice = console.input("\n[bold yellow]Select project key: [/bold yellow]").strip()
         if choice not in config.PROJECTS:
-            print("Exit.")
+            console.print("[bold red]Invalid selection. Terminating session.[/bold red]")
             return
 
         self.proj = config.PROJECTS[choice]
         self.sandbox = FolderSandbox(self.proj["path"])
         self.logger = ChangelogEngine()
 
+        console.print(f"[green]Active project selected:[/green] [bold white]{self.proj['name']}[/bold white]\n")
+
         while True:
-            cmd_line = input("f(x)> ").strip()
+            cmd_line = console.input("[bold cyan]f(x)> [/bold cyan]").strip()
             if not cmd_line:
                 continue
 
@@ -284,6 +343,7 @@ Available commands:
             head = parts[0].lower()
 
             if head in ("exit", "quit"):
+                console.print("[bold yellow]Session terminated by user.[/bold yellow]")
                 break
             elif head == "help":
                 self.print_help()
@@ -294,7 +354,7 @@ Available commands:
             elif head in ("log", "changelog"):
                 self.show_changelog()
             else:
-                print("Unknown command. Please write help.")
+                console.print("[bold red]Unknown command.[/bold red] Type [yellow]help[/yellow] to view available operations.")
 
 if __name__ == "__main__":
     OrchestratorConsole().start()

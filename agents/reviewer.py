@@ -45,7 +45,10 @@ RESPONSE FORMAT — STRICTLY JSON:
 If is_approved=true:
 - fix_instruction can be empty
 - should_create_observation is usually false
-- reasoning_summary is still mandatory"""
+- reasoning_summary is still mandatory
+CRITICAL RULE ON TASK COMPLETION:
+- You are approving ONLY the current file edit, NOT the entire project goal.
+- Never set current_step to "done" in your reasoning. Only approve or reject the code change itself."""
 
     # 1. Prune context to prevent overloading model context window
     compiler_log = str(state.get("compiler_output", ""))
