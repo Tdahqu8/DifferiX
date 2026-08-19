@@ -2,28 +2,22 @@ import re
 
 def find_dangerous_code(code: str) -> list[str]:
     """
-    Detects dangerous code patterns before file write.
-    Blocks patterns related to destructive file operations and shell deletion.
-    Returns a list of matched dangerous patterns (strings). Empty list means safe.
+    Detects dangerous code patterns and workspace inspection exploits before file write.
     """
-    # Strip comments to avoid false positives in documentation/comments
-    # Strip multi-line comments/docstrings
     cleaned = re.sub(r'""".*?"""', '', code, flags=re.DOTALL)
     cleaned = re.sub(r"'''.*?'''", '', cleaned, flags=re.DOTALL)
     cleaned = re.sub(r'/\*.*?\*/', '', cleaned, flags=re.DOTALL)
     
-    # Strip single-line comments
     lines = []
     for line in cleaned.splitlines():
-        # Remove lines that are purely comments
         if re.match(r'^\s*(#|//)', line):
             continue
-        # Remove inline comments (approximate)
         line_no_comment = re.sub(r'\s+(#|//).*$', '', line)
         lines.append(line_no_comment)
     cleaned_code = "\n".join(lines)
 
     dangerous_patterns = {
+        # --- Existing Destructive Operations ---
         r'os\.remove\s*\(': "os.remove()",
         r'os\.unlink\s*\(': "os.unlink()",
         r'shutil\.rmtree\s*\(': "shutil.rmtree()",
@@ -35,7 +29,14 @@ def find_dangerous_code(code: str) -> list[str]:
         r'subprocess\.(run|Popen|call|check_output|check_call)\s*\(.*shell\s*=\s*True': "subprocess with shell=True",
         r'del\s+/s': "del /s",
         r'shutil\.move\s*\(.*\.{2}/': "shutil.move with parent directory traversal",
-        r'os\.rename\s*\(.*\.{2}/': "os.rename with parent directory traversal"
+        r'os\.rename\s*\(.*\.{2}/': "os.rename with parent directory traversal",
+
+        # --- Context Dumping & Inspection Exploits ---
+        r'def\s+test_.*inspect': "Inspection test definition (test_inspect)",
+        r'raise\s+Exception\s*\(.*(os\.listdir|glob|read|open)': "Raising exception to dump workspace files",
+        r'assert\s+False\s*,\s*.*(inspect|file|workspace|dir)': "Intentional assert failure to dump workspace context",
+        r'sys\.stderr\.write\s*\(.*open\s*\(': "Writing file content to stderr for log leakage",
+        r'print\s*\(\s*open\s*\(.*\.read\s*\(\s*\)\s*\)': "Direct file print dumping"
     }
 
     hits = []
@@ -46,5 +47,4 @@ def find_dangerous_code(code: str) -> list[str]:
     return hits
 
 def is_safe(code: str) -> bool:
-    """Convenience wrapper: returns True if find_dangerous_code returns empty list."""
     return len(find_dangerous_code(code)) == 0

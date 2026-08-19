@@ -1,6 +1,6 @@
 import json
 import os
-import sys
+import re
 from datetime import datetime
 from dotenv import load_dotenv
 
@@ -23,10 +23,14 @@ from tools.backup_manager import (
     create_success_tag,
 )
 from tools.changelog_engine import ChangelogEngine
-from tools.project_scanner import get_project_files
 from tools.project_structure import generate_or_update_structure
 from tools.security_filter import find_dangerous_code
 from tools.reasoning_logger import log_reasoning
+from tools.project_scanner import (
+    get_full_project_context,
+    extract_plan_dependencies,
+    get_project_structure
+)
 
 from agents.researcher import run_researcher
 from agents.editor import run_editor
@@ -75,16 +79,16 @@ class OrchestratorConsole:
     def print_help(self):
         help_text = """
 [bold cyan]Available Commands:[/bold cyan]
-  [yellow]run / start[/yellow]         - Execute the main agent iteration cycle
-  [yellow]pause[/yellow]               - Pause execution and view recent changelogs
-  [yellow]stop[/yellow]                - Halt the active agent cycle
-  [yellow]status[/yellow]              - Display current workflow state and system metrics
-  [yellow]log / changelog[/yellow]     - Render session changelog summaries
-  [yellow]warn low|mid|high[/yellow]   - Issue an explicit warning instruction to agents
-  [yellow]rollback[/yellow]            - Revert repository to a target Git commit SHA
-  [yellow]history / commits[/yellow]   - Display full version control commit log
-  [yellow]help[/yellow]                - Show command directory
-  [yellow]exit / quit[/yellow]         - Terminate the orchestrator session
+    [yellow]run / start[/yellow]         - Execute the main agent iteration cycle
+    [yellow]pause[/yellow]               - Pause execution and view recent changelogs
+    [yellow]stop[/yellow]                - Halt the active agent cycle
+    [yellow]status[/yellow]              - Display current workflow state and system metrics
+    [yellow]log / changelog[/yellow]     - Render session changelog summaries
+    [yellow]warn low|mid|high[/yellow]   - Issue an explicit warning instruction to agents
+    [yellow]rollback[/yellow]            - Revert repository to a target Git commit SHA
+    [yellow]history / commits[/yellow]   - Display full version control commit log
+    [yellow]help[/yellow]                - Show command directory
+    [yellow]exit / quit[/yellow]         - Terminate the orchestrator session
 """
         console.print(Panel(help_text.strip(), title="System Help", border_style="cyan"))
 
@@ -161,7 +165,7 @@ class OrchestratorConsole:
                 break
 
             state = self.load_state()
-            project_files = get_project_files(self.proj["path"])
+            project_files = get_project_structure(self.proj["path"])
 
             if (
                 state.get("iteration_count", 0) >= config.MAX_ITERATIONS
@@ -192,13 +196,34 @@ class OrchestratorConsole:
                 self.update_costs(meta)
 
                 research_data = state.get("research_data", {})
+                # Researcher
+                res_payload = research_data if isinstance(research_data, dict) else {"raw_response": research_data}
                 log_reasoning("researcher", "research", {
-                    "analysis": research_data.get("analysis") if isinstance(research_data, dict) else str(research_data),
-                    "plan": research_data.get("plan") if isinstance(research_data, dict) else []
+                    "analysis": res_payload.get("analysis"),
+                    "plan": res_payload.get("plan")
                 }, project_root=self.proj["path"])
 
                 self.save_state(state)
 
+                plan_files = extract_plan_dependencies(state.get("plan") or state.get("research_analysis"))
+
+                if "target_file" in state:
+                    plan_files.append(state["target_file"])
+                full_context = get_full_project_context(
+                    root_dir=self.proj["path"],
+                    target_files=plan_files,
+                    core_files=("config.py", "tools/lesson_manager.py")
+                )
+                editor_prompt = f"""
+                {full_context}
+
+                ### CURRENT GOAL ###
+                {state.get('goal', 'Implement planned edits')}
+
+                ### LAST EXECUTION RESULT ###
+                {state.get('compiler_output', 'No previous errors.')}
+                """
+            
             # ----------------- 2. EDIT -----------------
             elif state.get("current_step") == "edit":
                 console.rule("[bold yellow]Step 2: Code Generation[/bold yellow]")
@@ -228,11 +253,11 @@ class OrchestratorConsole:
                     console.print("[bold red]Editor Error:[/bold red] No target file specified in output.")
                     self.save_state(state)
                     continue
-
+                # Editor
                 log_reasoning("editor", "edit", {
                     "target_file": res_file,
-                    "why": generated.get("why", "Planned edits implementation"),
-                    "changes_summary": generated.get("changes_summary", "")
+                    "why": generated.get("why"),
+                    "changes_summary": generated.get("changes_summary")
                 }, project_root=self.proj["path"])
 
                 danger_hits = find_dangerous_code(res_code)

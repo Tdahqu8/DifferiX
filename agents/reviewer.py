@@ -48,7 +48,8 @@ If is_approved=true:
 - reasoning_summary is still mandatory
 CRITICAL RULE ON TASK COMPLETION:
 - You are approving ONLY the current file edit, NOT the entire project goal.
-- Never set current_step to "done" in your reasoning. Only approve or reject the code change itself."""
+- Never set current_step to "done" in your reasoning. Only approve or reject the code change itself.
+- Prohibited operations: direct file deletions using os.remove or shutil.rmtree"""
 
     # 1. Prune context to prevent overloading model context window
     compiler_log = str(state.get("compiler_output", ""))

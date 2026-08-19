@@ -25,6 +25,8 @@ def extract_code_block(text: str) -> str:
 
 def run_editor(state, project_files=""):
     system_prompt = f"""You are an AI Code Editor. Write clean code/XML based on the Researcher's plan.
+    You are strictly forbidden from creating files named test_inspect.py, adding assert False statements to dump workspace
+    variables, or calling direct file deletions like os.remove or shutil.rmtree. Write production code directly!!!
 CRITICAL TARGET FILE RULE:
 - Do NOT edit or create inspection files (e.g., test_inspect.py).
 - Focus strictly on core module implementation files specified in the plan (e.g., main.py, config.py, tools/lesson_manager.py).
@@ -32,6 +34,9 @@ STRICT EXECUTION GUIDELINES:
 - NEVER write code that deliberately raises an Exception to inspect files or print contents (e.g., raise Exception("CONTENT_OF...")).
 - Implement requested business logic directly inside production files (main.py, config.py, tools/).
 - Do NOT create new files inside tests/ unless explicitly requested in the plan.
+- Do NOT write temporary test files (e.g., test_inspect.py) to explore directory contents or inspect code.
+- Do NOT use raise Exception or assert False to dump variables into test logs.
+- Prohibited operations: direct file deletions using os.remove or shutil.rmtree
 REQUIRED RESPONSE FORMAT:
 First, specify the file name and action in the following format:
 TARGET_FILE: path/to/file.py

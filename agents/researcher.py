@@ -21,6 +21,7 @@ def run_researcher(state, project_name, project_files=""):
     
     system_prompt = f"""You are the AI Researcher. Your goal is to study the task from state.json and formulate a technical plan for the Editor.
 Use only verified API methods. Do not invent syntax.
+- Prohibited operations: direct file deletions using os.remove or shutil.rmtree
 {lessons_context}
 
 Project files:
