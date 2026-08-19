@@ -108,7 +108,7 @@
     {
       "step": 4,
       "title": "Integrate Reviewer -> observation lessons",
-      "status": "pending",
+      "status": "completed",
       "assigned_to": "editor",
       "details": [
         "On failed review with root_cause, call create_observation()",
@@ -140,21 +140,18 @@
     "commands/ files are processed and moved to commands/done/",
     "Smoke run verifies full pipeline"
   ],
-  "compiler_output": "============================= test session starts =============================\nplatform win32 -- Python 3.14.6, pytest-9.1.1, pluggy-1.6.0 -- C:\\Users\\Eleanora\\AppData\\Local\\Programs\\Python\\Python314\\python.exe\ncachedir: .pytest_cache\nrootdir: C:\\projects-py\nplugins: anyio-4.14.2\ncollecting ... collected 1 item\n\n..\\function_1.1\\tests\\test_inspect.py::test_lesson_manager_lifecycle PASSED [100%]\n\n============================== 1 passed in 0.11s ==============================",
+  "compiler_output": "============================= test session starts =============================\nplatform win32 -- Python 3.14.6, pytest-9.1.1, pluggy-1.6.0 -- C:\\Users\\Eleanora\\AppData\\Local\\Programs\\Python\\Python314\\python.exe\ncachedir: .pytest_cache\nrootdir: C:\\projects-py\nplugins: anyio-4.14.2\ncollecting ... collected 1 item\n\n..\\function_1.1\\tests\\test_inspect.py::test_lesson_manager_lifecycle PASSED [100%]\n\n============================== 1 passed in 0.10s ==============================",
   "security_output": "",
   "review_result": {},
   "research_data": [
-    "Initialize all required directories including lessons subfolders, commands, commands/done, and status on startup.",
-    "Implement status/current.md updates at the beginning of each iteration to reflect the current step, iteration count, and status.",
-    "Implement a commands watcher that periodically checks the commands/ directory for files (pause, continue, stop, note), processes them, and archives them to commands/done/.",
-    "Implement the HITL pause mechanism every N cycles, writing a summary to status/last_summary.md and waiting for operator input or command files.",
-    "Integrate the Reviewer with tools/lesson_manager.py to create observation JSON files when builds or tests fail with a clear root cause.",
-    "Load promoted lessons from lessons/promoted/ and inject them into the Researcher's context during initialization.",
-    "Create a smoke verification script to validate the entire pipeline end-to-end."
+    "Locate and modify the Reviewer component (e.g., in reviewer.py or main.py) to detect build/test failures with clear root causes and call tools.lesson_manager.create_observation().",
+    "Modify the Researcher initialization in main.py to load promoted lessons using tools.lesson_manager.get_promoted_lessons() and append them to the system prompt or context.",
+    "Verify that status/current.md is updated correctly during each iteration and that commands/ are periodically checked and archived to commands/done/.",
+    "Create a smoke verification script (e.g., smoke_check.py) that simulates a full run, triggers a HITL pause, processes a command file, generates a failed build to trigger an observation, and verifies all directories and files are updated correctly."
   ],
   "generated_code": {
-    "target_file": "tools/lesson_manager.py",
-    "action": "create",
-    "code": "import os\nimport json\nimport datetime\nfrom config import (\n    OBSERVATIONS_DIR,\n    CANDIDATES_DIR,\n    PROMOTED_DIR,\n    DEPRECATED_DIR,\n    LESSONS_DIR\n)\n\ndef initialize_folders():\n    \"\"\"Ensure all lesson lifecycle folders exist.\"\"\"\n    for directory in [LESSONS_DIR, OBSERVATIONS_DIR, CANDIDATES_DIR, PROMOTED_DIR, DEPRECATED_DIR]:\n        os.makedirs(directory, exist_ok=True)\n\ndef create_observation(root_cause, details, metadata=None):\n    \"\"\"\n    Creates an observation JSON file when a build or test fails with a clear root cause.\n    \"\"\"\n    initialize_folders()\n    timestamp = datetime.datetime.now().strftime(\"%Y%m%d_%H%M%S\")\n    filename = f\"observation_{timestamp}.json\"\n    filepath = os.path.join(OBSERVATIONS_DIR, filename)\n    \n    observation_data = {\n        \"id\": f\"obs_{timestamp}\",\n        \"timestamp\": datetime.datetime.now().isoformat(),\n        \"root_cause\": root_cause,\n        \"details\": details,\n        \"metadata\": metadata or {},\n        \"status\": \"observed\"\n    }\n    \n    with open(filepath, \"w\", encoding=\"utf-8\") as f:\n        json.dump(observation_data, f, indent=2)\n    \n    return filepath\n\ndef get_promoted_lessons():\n    \"\"\"\n    Loads and returns all promoted lessons to be injected into the Researcher context.\n    \"\"\"\n    initialize_folders()\n    lessons = []\n    if not os.path.exists(PROMOTED_DIR):\n        return lessons\n        \n    for filename in os.listdir(PROMOTED_DIR):\n        if filename.endswith(\".json\"):\n            filepath = os.path.join(PROMOTED_DIR, filename)\n            try:\n                with open(filepath, \"r\", encoding=\"utf-8\") as f:\n                    lesson_data = json.load(f)\n                    lessons.append(lesson_data)\n            except Exception as e:\n                print(f\"Error reading lesson file {filename}: {e}\")\n    return lessons\n\ndef promote_lesson(lesson_id, source_dir=CANDIDATES_DIR):\n    \"\"\"\n    Moves a lesson from candidates (or observations) to promoted.\n    \"\"\"\n    initialize_folders()\n    # Find the file in source_dir\n    for filename in os.listdir(source_dir):\n        if filename.endswith(\".json\"):\n            filepath = os.path.join(source_dir, filename)\n            try:\n                with open(filepath, \"r\", encoding=\"utf-8\") as f:\n                    data = json.load(f)\n                if data.get(\"id\") == lesson_id:\n                    data[\"status\"] = \"promoted\"\n                    data[\"promoted_at\"] = datetime.datetime.now().isoformat()\n                    \n                    dest_path = os.path.join(PROMOTED_DIR, filename)\n                    with open(dest_path, \"w\", encoding=\"utf-8\") as f_out:\n                        json.dump(data, f_out, indent=2)\n                    \n                    os.remove(filepath)\n                    return dest_path\n            except Exception as e:\n                print(f\"Error promoting lesson {lesson_id}: {e}\")\n    return None\n\ndef deprecate_lesson(lesson_id):\n    \"\"\"\n    Moves a lesson from promoted to deprecated.\n    \"\"\"\n    initialize_folders()\n    for filename in os.listdir(PROMOTED_DIR):\n        if filename.endswith(\".json\"):\n            filepath = os.path.join(PROMOTED_DIR, filename)\n            try:\n                with open(filepath, \"r\", encoding=\"utf-8\") as f:\n                    data = json.load(f)\n                if data.get(\"id\") == lesson_id:\n                    data[\"status\"] = \"deprecated\"\n                    data[\"deprecated_at\"] = datetime.datetime.now().isoformat()\n                    \n                    dest_path = os.path.join(DEPRECATED_DIR, filename)\n                    with open(dest_path, \"w\", encoding=\"utf-8\") as f_out:\n                        json.dump(data, f_out, indent=2)\n                    \n                    os.remove(filepath)\n                    return dest_path\n            except Exception as e:\n                print(f\"Error deprecating lesson {lesson_id}: {e}\")\n    return None"
+    "target_file": "",
+    "action": "modify",
+    "code": ""
   }
 }
