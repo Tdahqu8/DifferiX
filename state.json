@@ -3,9 +3,9 @@
   "created_at": "2026-08-17T13:00:00+06:00",
   "status": "in_progress",
   "priority": "critical",
-  "goal": "Complete the remaining foundation: 1) real HITL pause every N cycles with readable summary, 2) proper lessons lifecycle (observation/candidate/promoted folders) integrated with Reviewer, 3) minimal git/phone control via status + commands folders, 4) short smoke verification that the full pipeline works together.",
-  "current_step": "done",
-  "iteration_count": 4,
+  "goal": "Complete foundation: 1) real HITL pause every N cycles with summary, 2) lessons lifecycle folders integrated with Reviewer, 3) status + commands control, 4) smoke verification.",
+  "current_step": "research",
+  "iteration_count": 0,
   "need_human": false,
   "warnings": [],
   "context": {
@@ -13,22 +13,21 @@
       "Research -> Edit -> Review pipeline",
       "Polyglot build/test runner (compiler.py)",
       "Security filter before writes",
-      "Project structure scanner with fingerprint (PROJECT_STRUCTURE.md + structure_meta.json)",
+      "Project structure scanner with fingerprint",
       "Reasoning logger (status/last_thoughts.md + reasoning_log.jsonl)",
       "Git autocommit / rollback tools",
       "CLI commands: run, pause, stop, status, log, help, history, rollback, exit",
       "File sandbox + project scanner",
-      "Basic lessons_learned.json still present as legacy store"
+      "tools/lesson_manager.py helper module"
     ],
-    "why_this_task": "Structure, security and reasoning logs are in place. Before real RimWorld work, the system still needs forced human checkpoints, a clean lesson lifecycle, and remote-friendly status/commands so runs are controllable and experience is captured properly.",
+    "why_this_task": "System needs forced human checkpoints, folder-based lesson lifecycle, and remote control via commands folder before feature work.",
     "out_of_scope_now": [
       "Activation Score formula",
       "Sleep / memory maintenance",
       "Personal vs shared multi-layer memory",
       "Semantic embeddings search",
       "Manager agent role",
-      "UI / web interface",
-      "RimWorld-specific feature work"
+      "UI / web interface"
     ]
   },
   "requirements": {
@@ -38,56 +37,40 @@
         "Add config value HITL_EVERY_N_CYCLES (default 3)",
         "After every N completed research-edit-review iterations, pause the cycle",
         "Write a short human-readable summary to console and status/last_summary.md",
-        "Summary must include: goal, current_step, iteration_count, last compiler/security result, key agent reasoning, new/updated lessons if any",
-        "Accept simple operator replies: continue | stop | note:<text>",
-        "If note is given, append it into state.warnings or state.operator_notes and into status/last_summary.md"
+        "Accept operator replies: continue | stop | note:<text>"
       ]
     },
     "2_lessons_lifecycle": {
-      "description": "Replace flat-only lessons usage with folder lifecycle",
+      "description": "Folder lifecycle integrated with Reviewer",
       "details": [
         "Ensure folders exist: lessons/observations/, lessons/candidates/, lessons/promoted/, lessons/deprecated/",
-        "Each lesson is a separate JSON file",
-        "Minimal schema fields: id, status, rule, why, tags, created_at, source, related_files (optional), priority (optional)",
-        "Helpers: create_observation(...), move_to_candidate(id), move_to_promoted(id), move_to_deprecated(id), list_lessons(status=None)",
-        "Reviewer path: when should_create_observation is true OR when build/test fails with a clear root cause, create an observation JSON",
-        "Optional bridge: keep reading legacy lessons_learned.json if present, but new lessons must go into folder structure",
-        "Inject only promoted (and optionally high-priority candidates) into Researcher context"
+        "When build/test fails with a clear root cause, create an observation JSON",
+        "Inject promoted lessons into Researcher context"
       ]
     },
     "3_phone_git_control": {
       "description": "Minimal remote control via git-friendly files",
       "details": [
-        "Maintain status/current.md during runs (live status: step, iteration, last error, need_human)",
+        "Maintain status/current.md during runs",
         "Maintain status/last_summary.md after HITL pauses",
         "Create commands/ folder watched by orchestrator",
-        "Supported command files: pause, continue, stop, note (file body = note text)",
-        "After processing, move command file into commands/done/ with timestamped name",
-        "Do not build network services; file-based control only"
+        "Supported command files: pause, continue, stop, note",
+        "After processing, move command file into commands/done/"
       ]
     },
     "4_orchestrator_integration": {
-      "description": "Wire the above into main.py cleanly",
+      "description": "Wire components into main.py cleanly",
       "details": [
-        "On run start: refresh project structure, load promoted lessons into context",
-        "Each iteration: update status/current.md",
-        "After Editor: security filter -> write/test -> Reviewer",
-        "After Reviewer failure with clear cause: create observation lesson",
-        "Every N iterations: HITL pause + summary",
-        "Periodically check commands/ for remote commands",
-        "Keep existing CLI commands working"
+        "Load promoted lessons into Researcher context on startup",
+        "Update status/current.md each iteration",
+        "Trigger HITL pause every N iterations",
+        "Periodically check commands/ directory"
       ]
     },
     "5_smoke_check": {
       "description": "Verify foundation pieces together",
       "details": [
-        "Run 1-2 short synthetic tasks inside the f(x) working copy",
-        "Confirm structure file exists/updates",
-        "Confirm security filter still blocks dangerous code",
-        "Confirm reasoning logs still write",
-        "Confirm lesson observation can be created and listed",
-        "Confirm HITL pause happens and writes last_summary.md",
-        "Confirm a command file in commands/ is detected and moved to done/"
+        "Run short verification confirming structure, security, reasoning, lessons, HITL, and commands work together"
       ]
     }
   },
@@ -95,12 +78,11 @@
     {
       "step": 1,
       "title": "Lessons folder lifecycle + helpers",
-      "status": "pending",
+      "status": "completed",
       "assigned_to": "editor",
       "details": [
-        "Create/confirm lessons/observations|candidates|promoted|deprecated",
-        "Implement or extend tools/lesson_manager.py for JSON-per-lesson lifecycle",
-        "Add create/move/list helpers with stable unique ids"
+        "Verify tools/lesson_manager.py",
+        "Ensure lessons/ subdirectories are initialized"
       ]
     },
     {
@@ -110,8 +92,7 @@
       "assigned_to": "editor",
       "details": [
         "Add HITL_EVERY_N_CYCLES to config.py",
-        "Implement pause + summary writer",
-        "Support continue/stop/note responses"
+        "Implement pause + summary writer in main.py"
       ]
     },
     {
@@ -120,8 +101,8 @@
       "status": "pending",
       "assigned_to": "editor",
       "details": [
-        "Write/update status/current.md and status/last_summary.md",
-        "Implement commands/ watcher and commands/done/ archival"
+        "Write status/current.md and status/last_summary.md",
+        "Implement commands/ watcher and commands/done/ archival in main.py"
       ]
     },
     {
@@ -130,7 +111,7 @@
       "status": "pending",
       "assigned_to": "editor",
       "details": [
-        "On failed review with root_cause, create observation",
+        "On failed review with root_cause, call create_observation()",
         "Pass promoted lessons into Researcher context"
       ]
     },
@@ -140,60 +121,86 @@
       "status": "pending",
       "assigned_to": "reviewer + editor",
       "details": [
-        "Run short end-to-end verification of all foundation pieces",
-        "Fix only critical blockers"
+        "Verify all foundation features end-to-end"
       ]
     }
   ],
   "constraints": [
+    "Do not edit test_inspect.py or create dummy inspection test files",
     "Do not implement Activation Score, sleep, Manager, or semantic search",
-    "Do not start RimWorld feature development in this task",
-    "Do not rewrite the whole orchestrator from scratch",
-    "Keep changes minimal, explicit, and readable",
-    "No destructive file operations in tooling",
-    "Self-hosted only; no new cloud services"
-  ],
-  "notes_for_agents": [
-    "Researcher: produce a short technical plan with exact files to create/modify. Prefer extending existing tools (lesson_manager, main.py, config.py) over new frameworks.",
-    "Editor: implement one vertical slice at a time. After each write, rely on real runner/security logs. Use relative paths from project root.",
-    "Reviewer: approve only with supporting logs. If HITL/lessons/commands integration is incomplete, return concrete fix_instruction. Create observations for real recurring failure patterns."
+    "Keep changes minimal, explicit, and readable"
   ],
   "definition_of_done": [
-    "lessons/observations, candidates, promoted, deprecated exist and store one JSON lesson per file",
+    "lessons/ subfolders exist and store JSON lesson files",
     "create_observation / move_to_* helpers work",
-    "Failed reviews can create observation lessons",
+    "Failed reviews create observation lessons",
     "Promoted lessons are injected into Researcher context",
     "HITL pause triggers every N cycles and writes status/last_summary.md",
-    "Operator can continue/stop/note after HITL pause",
     "status/current.md updates during runs",
     "commands/ files are processed and moved to commands/done/",
-    "A short smoke run proves structure + security + reasoning + lessons + HITL + commands work together",
-    "No crash on common empty/invalid agent outputs"
+    "Smoke run verifies full pipeline"
   ],
-  "research_data": "[Reviewer Fix]: Now that you have inspected the workspace files, please proceed with implementing the Lesson Lifecycle Manager in `tools/lesson_manager.py` or the appropriate files as outlined in the plan, and ensure all tests pass.\n[Reviewer Fix]: Now that the workspace files have been inspected, remove or update the inspection test, and proceed with implementing the Lesson Lifecycle Manager in `tools/lesson_manager.py` or other target files as planned.\n[Reviewer Fix]: Avoid using manual file/directory deletion operations like `shutil.rmtree` or `os.remove`. Instead, use pytest's built-in `tmp_path` fixture to handle temporary directories safely and automatically.",
-  "generated_code": {
-    "target_file": "tests/test_inspect.py",
-    "action": "modify",
-    "code": "import os\nimport json\nfrom tools.lesson_manager import LessonManager\n\ndef test_lesson_manager_lifecycle(tmp_path):\n    # Use pytest's tmp_path fixture to avoid manual shutil.rmtree or os.remove\n    test_dir = str(tmp_path / \"lessons_test_temp\")\n    \n    lm = LessonManager(base_dir=test_dir)\n    \n    # Create observation\n    lesson_id = lm.create_observation(\n        rule=\"Always use absolute imports in tests\",\n        why=\"Relative imports can fail depending on test runner location\",\n        tags=[\"testing\", \"imports\"],\n        source=\"test_run\",\n        related_files=[\"tests/test_inspect.py\"],\n        priority=2\n    )\n    \n    assert lesson_id is not None\n    assert lesson_id.startswith(\"L-\")\n    \n    # List observations\n    observations = lm.list_lessons(\"observations\")\n    assert len(observations) == 1\n    assert observations[0][\"id\"] == lesson_id\n    assert observations[0][\"status\"] == \"observation\"\n    \n    # Move to candidate\n    success = lm.move_lesson(lesson_id, \"candidates\")\n    assert success is True\n    \n    candidates = lm.list_lessons(\"candidates\")\n    assert len(candidates) == 1\n    assert candidates[0][\"status\"] == \"candidate\""
-  },
-  "compiler_output": "============================= test session starts =============================\nplatform win32 -- Python 3.14.6, pytest-9.1.1, pluggy-1.6.0 -- C:\\Users\\Eleanora\\AppData\\Local\\Programs\\Python\\Python314\\python.exe\ncachedir: .pytest_cache\nrootdir: C:\\projects-py\nplugins: anyio-4.14.2\ncollecting ... collected 1 item\n\n..\\function_1.1\\tests\\test_inspect.py::test_lesson_manager_lifecycle PASSED [100%]\n\n============================== 1 passed in 0.10s ==============================",
+  "compiler_output": "============================= test session starts =============================\nplatform win32 -- Python 3.14.6, pytest-9.1.1, pluggy-1.6.0 -- C:\\Users\\Eleanora\\AppData\\Local\\Programs\\Python\\Python314\\python.exe\ncachedir: .pytest_cache\nrootdir: C:\\projects-py\nplugins: anyio-4.14.2\ncollecting ... collected 1 item\n\n..\\function_1.1\\tests\\test_inspect.py::test_lesson_manager_lifecycle PASSED [100%]\n\n============================== 1 passed in 0.14s ==============================",
   "security_output": "",
-  "review_result": {
-    "is_approved": false,
-    "verdict": "Dangerous code found (shutil.rmtree) and test failure detected.",
-    "root_cause": "The generated code contains `shutil.rmtree` which is a prohibited dangerous operation. Additionally, the test suite failed on `test_workspace_inspection`.",
-    "fix_instruction": "Avoid using manual file/directory deletion operations like `shutil.rmtree` or `os.remove`. Instead, use pytest's built-in `tmp_path` fixture to handle temporary directories safely and automatically.",
-    "dangerous_code_found": true,
-    "should_create_observation": true,
-    "observation_draft": {
-      "rule": "Use pytest tmp_path fixture instead of manual shutil.rmtree or os.remove",
-      "why": "Manual file and directory deletion operations are dangerous and prohibited. Pytest's tmp_path fixture provides a safe, isolated, and automatically managed temporary directory for tests.",
-      "tags": [
-        "testing",
-        "safety",
-        "pytest"
+  "review_result": {},
+  "research_data": [
+    {
+      "step": 1,
+      "title": "Initialize Directories and Configuration",
+      "status": "pending",
+      "assigned_to": "editor",
+      "details": [
+        "Ensure lessons/observations/, lessons/candidates/, lessons/promoted/, lessons/deprecated/, commands/, commands/done/, and status/ directories are created on startup.",
+        "Add HITL_EVERY_N_CYCLES = 3 to config.py (or equivalent configuration file)."
       ]
     },
-    "reasoning_summary": "The generated code contains `shutil.rmtree` which is explicitly classified as a dangerous operation. Furthermore, the test suite reported a failure in `test_workspace_inspection`."
+    {
+      "step": 2,
+      "title": "Integrate Lessons Lifecycle with Researcher and Reviewer",
+      "status": "pending",
+      "assigned_to": "editor",
+      "details": [
+        "Load all JSON files from lessons/promoted/ and inject their content into the Researcher's prompt/context on startup.",
+        "When a build or test fails with a clear root cause during the review phase, generate an observation JSON in lessons/observations/ containing the failure details, root cause, and suggested lesson."
+      ]
+    },
+    {
+      "step": 3,
+      "title": "Implement Status Updates and Command Watcher",
+      "status": "pending",
+      "assigned_to": "editor",
+      "details": [
+        "Update status/current.md at the beginning of each iteration with current step, iteration count, and status.",
+        "Implement a command watcher function that checks the commands/ directory for files named 'pause', 'continue', 'stop', or 'note'.",
+        "When a command file is detected, process its instruction (e.g., pause execution, stop execution, or read note content) and move the file to commands/done/."
+      ]
+    },
+    {
+      "step": 4,
+      "title": "Implement HITL Pause and Summary",
+      "status": "pending",
+      "assigned_to": "editor",
+      "details": [
+        "Track completed iterations. Every HITL_EVERY_N_CYCLES iterations, trigger a pause.",
+        "Write a human-readable summary of the last N cycles to status/last_summary.md and print it to the console.",
+        "Wait for operator input either via console stdin or by polling the commands/ directory for 'continue', 'stop', or 'note' files.",
+        "Resume or terminate the run based on the operator's response."
+      ]
+    },
+    {
+      "step": 5,
+      "title": "Orchestrator Integration and Smoke Verification",
+      "status": "pending",
+      "assigned_to": "editor",
+      "details": [
+        "Wire all components cleanly into main.py.",
+        "Create a smoke verification script to run a short pipeline run, confirming that status files are updated, HITL pause triggers, commands are processed, and lessons are loaded/created correctly."
+      ]
+    }
+  ],
+  "generated_code": {
+    "target_file": "tools/lesson_manager.py",
+    "action": "create",
+    "code": "import os\nimport json\nimport datetime\n\n# Define directories\nLESSONS_DIR = \"lessons\"\nOBSERVATIONS_DIR = os.path.join(LESSONS_DIR, \"observations\")\nCANDIDATES_DIR = os.path.join(LESSONS_DIR, \"candidates\")\nPROMOTED_DIR = os.path.join(LESSONS_DIR, \"promoted\")\nDEPRECATED_DIR = os.path.join(LESSONS_DIR, \"deprecated\")\n\nCOMMANDS_DIR = \"commands\"\nCOMMANDS_DONE_DIR = os.path.join(COMMANDS_DIR, \"done\")\nSTATUS_DIR = \"status\"\n\nALL_DIRS = [\n    OBSERVATIONS_DIR,\n    CANDIDATES_DIR,\n    PROMOTED_DIR,\n    DEPRECATED_DIR,\n    COMMANDS_DIR,\n    COMMANDS_DONE_DIR,\n    STATUS_DIR\n]\n\ndef initialize_folders():\n    \"\"\"Ensure all required directories exist.\"\"\"\n    for directory in ALL_DIRS:\n        os.makedirs(directory, exist_ok=True)\n\ndef create_observation(root_cause, failure_details, suggested_lesson):\n    \"\"\"Create an observation JSON file when a build/test fails with a clear root cause.\"\"\"\n    initialize_folders()\n    timestamp = datetime.datetime.utcnow().strftime(\"%Y%m%d_%H%M%S\")\n    observation_id = f\"obs_{timestamp}\"\n    filename = f\"{observation_id}.json\"\n    filepath = os.path.join(OBSERVATIONS_DIR, filename)\n    \n    data = {\n        \"id\": observation_id,\n        \"timestamp\": datetime.datetime.utcnow().isoformat(),\n        \"root_cause\": root_cause,\n        \"failure_details\": failure_details,\n        \"suggested_lesson\": suggested_lesson,\n        \"status\": \"observation\"\n    }\n    \n    with open(filepath, \"w\", encoding=\"utf-8\") as f:\n        json.dump(data, f, indent=2)\n    \n    return filepath\n\ndef load_promoted_lessons():\n    \"\"\"Load all promoted lessons to inject into the Researcher context.\"\"\"\n    initialize_folders()\n    lessons = []\n    for filename in os.listdir(PROMOTED_DIR):\n        if filename.endswith(\".json\"):\n            filepath = os.path.join(PROMOTED_DIR, filename)\n            try:\n                with open(filepath, \"r\", encoding=\"utf-8\") as f:\n                    lessons.append(json.load(f))\n            except Exception as e:\n                print(f\"Error loading promoted lesson {filename}: {e}\")\n    return lessons\n\ndef move_lesson(filename, source_folder, target_folder):\n    \"\"\"Move a lesson file from source_folder to target_folder.\"\"\"\n    src_path = os.path.join(source_folder, filename)\n    dst_path = os.path.join(target_folder, filename)\n    if os.path.exists(src_path):\n        os.rename(src_path, dst_path)\n        return True\n    return False"
   }
 }

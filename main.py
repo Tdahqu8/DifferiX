@@ -266,19 +266,48 @@ class OrchestratorConsole:
 
                 if success:
                     console.print(Panel(log, title="Build/Test Log - Success", border_style="bold green"))
-                    state["current_step"] = "done"
-                    self.save_state(state)
+                    
+                    # 1. Update plan step statuses
+                    plan = state.get("plan", [])
+                    step_updated = False
+                    for step_item in plan:
+                        if isinstance(step_item, dict) and step_item.get("status") == "pending":
+                            step_item["status"] = "completed"
+                            step_updated = True
+                            console.print(f"[bold green]Plan step completed:[/bold green] {step_item.get('title', 'Subtask')}")
+                            break
 
-                    try:
-                        repo = get_repo()
-                        make_auto_commit(repo, "orchestrator", "Success after debugging")
-                        create_success_tag(repo)
-                    except Exception as e:
-                        console.print(f"[bold red]Git Checkpoint Error:[/bold red] {e}")
+                    # 2. Check if all plan steps are finished
+                    pending_steps = [s for s in plan if isinstance(s, dict) and s.get("status") == "pending"]
 
-                    self.logger.record_iteration(state, diff_data=current_diff)
-                    console.print(Panel("[bold green]All workflow steps completed successfully.[/bold green]", border_style="green"))
-                    break
+                    if pending_steps:
+                        # Loop back to research/edit for remaining plan items
+                        console.print(f"[bold yellow]Build passed, but {len(pending_steps)} plan step(s) remain. Continuing cycle...[/bold yellow]")
+                        state["current_step"] = "research"
+                        self.save_state(state)
+                        
+                        try:
+                            repo = get_repo()
+                            make_auto_commit(repo, "orchestrator", f"Progress checkpoint: {len(pending_steps)} steps remaining")
+                        except Exception as e:
+                            console.print(f"[bold red]Git Checkpoint Error:[/bold red] {e}")
+
+                        self.logger.record_iteration(state, diff_data=current_diff)
+                    else:
+                        # Fully finished only when no pending plan items remain
+                        state["current_step"] = "done"
+                        self.save_state(state)
+
+                        try:
+                            repo = get_repo()
+                            make_auto_commit(repo, "orchestrator", "Success after debugging")
+                            create_success_tag(repo)
+                        except Exception as e:
+                            console.print(f"[bold red]Git Checkpoint Error:[/bold red] {e}")
+
+                        self.logger.record_iteration(state, diff_data=current_diff)
+                        console.print(Panel("[bold green]All workflow steps completed successfully.[/bold green]", border_style="green"))
+                        break
                 else:
                     console.print(Panel(log, title="Build/Test Log - Failed", border_style="bold red"))
                     
@@ -295,6 +324,8 @@ class OrchestratorConsole:
                         "reasoning_summary": rev_res.get("reasoning_summary")
                     }, project_root=self.proj["path"])
 
+                    # If review fails, keep step in edit mode for retry
+                    state["current_step"] = "edit"
                     self.save_state(state)
                     self.logger.record_iteration(state, diff_data=current_diff)
 

@@ -25,7 +25,9 @@ def extract_code_block(text: str) -> str:
 
 def run_editor(state, project_files=""):
     system_prompt = f"""You are an AI Code Editor. Write clean code/XML based on the Researcher's plan.
-
+CRITICAL TARGET FILE RULE:
+- Do NOT edit or create inspection files (e.g., test_inspect.py).
+- Focus strictly on core module implementation files specified in the plan (e.g., main.py, config.py, tools/lesson_manager.py).
 REQUIRED RESPONSE FORMAT:
 First, specify the file name and action in the following format:
 TARGET_FILE: path/to/file.py
