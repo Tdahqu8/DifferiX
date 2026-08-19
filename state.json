@@ -88,7 +88,7 @@
     {
       "step": 2,
       "title": "HITL every N cycles",
-      "status": "pending",
+      "status": "completed",
       "assigned_to": "editor",
       "details": [
         "Add HITL_EVERY_N_CYCLES to config.py",
@@ -140,67 +140,21 @@
     "commands/ files are processed and moved to commands/done/",
     "Smoke run verifies full pipeline"
   ],
-  "compiler_output": "============================= test session starts =============================\nplatform win32 -- Python 3.14.6, pytest-9.1.1, pluggy-1.6.0 -- C:\\Users\\Eleanora\\AppData\\Local\\Programs\\Python\\Python314\\python.exe\ncachedir: .pytest_cache\nrootdir: C:\\projects-py\nplugins: anyio-4.14.2\ncollecting ... collected 1 item\n\n..\\function_1.1\\tests\\test_inspect.py::test_lesson_manager_lifecycle PASSED [100%]\n\n============================== 1 passed in 0.14s ==============================",
+  "compiler_output": "============================= test session starts =============================\nplatform win32 -- Python 3.14.6, pytest-9.1.1, pluggy-1.6.0 -- C:\\Users\\Eleanora\\AppData\\Local\\Programs\\Python\\Python314\\python.exe\ncachedir: .pytest_cache\nrootdir: C:\\projects-py\nplugins: anyio-4.14.2\ncollecting ... collected 1 item\n\n..\\function_1.1\\tests\\test_inspect.py::test_lesson_manager_lifecycle PASSED [100%]\n\n============================== 1 passed in 0.10s ==============================",
   "security_output": "",
   "review_result": {},
   "research_data": [
-    {
-      "step": 1,
-      "title": "Initialize Directories and Configuration",
-      "status": "pending",
-      "assigned_to": "editor",
-      "details": [
-        "Ensure lessons/observations/, lessons/candidates/, lessons/promoted/, lessons/deprecated/, commands/, commands/done/, and status/ directories are created on startup.",
-        "Add HITL_EVERY_N_CYCLES = 3 to config.py (or equivalent configuration file)."
-      ]
-    },
-    {
-      "step": 2,
-      "title": "Integrate Lessons Lifecycle with Researcher and Reviewer",
-      "status": "pending",
-      "assigned_to": "editor",
-      "details": [
-        "Load all JSON files from lessons/promoted/ and inject their content into the Researcher's prompt/context on startup.",
-        "When a build or test fails with a clear root cause during the review phase, generate an observation JSON in lessons/observations/ containing the failure details, root cause, and suggested lesson."
-      ]
-    },
-    {
-      "step": 3,
-      "title": "Implement Status Updates and Command Watcher",
-      "status": "pending",
-      "assigned_to": "editor",
-      "details": [
-        "Update status/current.md at the beginning of each iteration with current step, iteration count, and status.",
-        "Implement a command watcher function that checks the commands/ directory for files named 'pause', 'continue', 'stop', or 'note'.",
-        "When a command file is detected, process its instruction (e.g., pause execution, stop execution, or read note content) and move the file to commands/done/."
-      ]
-    },
-    {
-      "step": 4,
-      "title": "Implement HITL Pause and Summary",
-      "status": "pending",
-      "assigned_to": "editor",
-      "details": [
-        "Track completed iterations. Every HITL_EVERY_N_CYCLES iterations, trigger a pause.",
-        "Write a human-readable summary of the last N cycles to status/last_summary.md and print it to the console.",
-        "Wait for operator input either via console stdin or by polling the commands/ directory for 'continue', 'stop', or 'note' files.",
-        "Resume or terminate the run based on the operator's response."
-      ]
-    },
-    {
-      "step": 5,
-      "title": "Orchestrator Integration and Smoke Verification",
-      "status": "pending",
-      "assigned_to": "editor",
-      "details": [
-        "Wire all components cleanly into main.py.",
-        "Create a smoke verification script to run a short pipeline run, confirming that status files are updated, HITL pause triggers, commands are processed, and lessons are loaded/created correctly."
-      ]
-    }
+    "Verify and initialize all required directories (lessons/observations, lessons/candidates, lessons/promoted, lessons/deprecated, commands, commands/done, status) on startup.",
+    "Integrate the lesson manager with the Reviewer so that failed builds or tests with clear root causes generate observation JSON files.",
+    "Load promoted lessons from lessons/promoted/ and inject them into the Researcher's context during initialization.",
+    "Implement status/current.md updates at the start of each iteration to track current step, iteration count, and status.",
+    "Implement a commands watcher in the main loop to check for files (pause, continue, stop, note) in the commands/ directory, process them, and archive them to commands/done/.",
+    "Implement the HITL pause mechanism every N cycles (configured via HITL_EVERY_N_CYCLES), writing a summary to status/last_summary.md and waiting for operator input.",
+    "Create a smoke verification script to validate the entire pipeline end-to-end."
   ],
   "generated_code": {
-    "target_file": "tools/lesson_manager.py",
+    "target_file": "config.py",
     "action": "create",
-    "code": "import os\nimport json\nimport datetime\n\n# Define directories\nLESSONS_DIR = \"lessons\"\nOBSERVATIONS_DIR = os.path.join(LESSONS_DIR, \"observations\")\nCANDIDATES_DIR = os.path.join(LESSONS_DIR, \"candidates\")\nPROMOTED_DIR = os.path.join(LESSONS_DIR, \"promoted\")\nDEPRECATED_DIR = os.path.join(LESSONS_DIR, \"deprecated\")\n\nCOMMANDS_DIR = \"commands\"\nCOMMANDS_DONE_DIR = os.path.join(COMMANDS_DIR, \"done\")\nSTATUS_DIR = \"status\"\n\nALL_DIRS = [\n    OBSERVATIONS_DIR,\n    CANDIDATES_DIR,\n    PROMOTED_DIR,\n    DEPRECATED_DIR,\n    COMMANDS_DIR,\n    COMMANDS_DONE_DIR,\n    STATUS_DIR\n]\n\ndef initialize_folders():\n    \"\"\"Ensure all required directories exist.\"\"\"\n    for directory in ALL_DIRS:\n        os.makedirs(directory, exist_ok=True)\n\ndef create_observation(root_cause, failure_details, suggested_lesson):\n    \"\"\"Create an observation JSON file when a build/test fails with a clear root cause.\"\"\"\n    initialize_folders()\n    timestamp = datetime.datetime.utcnow().strftime(\"%Y%m%d_%H%M%S\")\n    observation_id = f\"obs_{timestamp}\"\n    filename = f\"{observation_id}.json\"\n    filepath = os.path.join(OBSERVATIONS_DIR, filename)\n    \n    data = {\n        \"id\": observation_id,\n        \"timestamp\": datetime.datetime.utcnow().isoformat(),\n        \"root_cause\": root_cause,\n        \"failure_details\": failure_details,\n        \"suggested_lesson\": suggested_lesson,\n        \"status\": \"observation\"\n    }\n    \n    with open(filepath, \"w\", encoding=\"utf-8\") as f:\n        json.dump(data, f, indent=2)\n    \n    return filepath\n\ndef load_promoted_lessons():\n    \"\"\"Load all promoted lessons to inject into the Researcher context.\"\"\"\n    initialize_folders()\n    lessons = []\n    for filename in os.listdir(PROMOTED_DIR):\n        if filename.endswith(\".json\"):\n            filepath = os.path.join(PROMOTED_DIR, filename)\n            try:\n                with open(filepath, \"r\", encoding=\"utf-8\") as f:\n                    lessons.append(json.load(f))\n            except Exception as e:\n                print(f\"Error loading promoted lesson {filename}: {e}\")\n    return lessons\n\ndef move_lesson(filename, source_folder, target_folder):\n    \"\"\"Move a lesson file from source_folder to target_folder.\"\"\"\n    src_path = os.path.join(source_folder, filename)\n    dst_path = os.path.join(target_folder, filename)\n    if os.path.exists(src_path):\n        os.rename(src_path, dst_path)\n        return True\n    return False"
+    "code": "import os\n\n# Configuration for the HITL and Orchestrator loop\nHITL_EVERY_N_CYCLES = 3\n\n# Directories\nLESSONS_DIR = \"lessons\"\nOBSERVATIONS_DIR = os.path.join(LESSONS_DIR, \"observations\")\nCANDIDATES_DIR = os.path.join(LESSONS_DIR, \"candidates\")\nPROMOTED_DIR = os.path.join(LESSONS_DIR, \"promoted\")\nDEPRECATED_DIR = os.path.join(LESSONS_DIR, \"deprecated\")\n\nCOMMANDS_DIR = \"commands\"\nCOMMANDS_DONE_DIR = os.path.join(COMMANDS_DIR, \"done\")\nSTATUS_DIR = \"status\""
   }
 }
