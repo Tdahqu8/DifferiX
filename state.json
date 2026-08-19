@@ -88,7 +88,7 @@
     {
       "step": 2,
       "title": "HITL every N cycles",
-      "status": "pending",
+      "status": "completed",
       "assigned_to": "editor",
       "details": [
         "Add HITL_EVERY_N_CYCLES to config.py",
@@ -140,49 +140,22 @@
     "commands/ files are processed and moved to commands/done/",
     "Smoke run verifies full pipeline"
   ],
-  "compiler_output": "============================= test session starts =============================\nplatform win32 -- Python 3.14.6, pytest-9.1.1, pluggy-1.6.0 -- C:\\Users\\Eleanora\\AppData\\Local\\Programs\\Python\\Python314\\python.exe\ncachedir: .pytest_cache\nrootdir: C:\\projects-py\nplugins: anyio-4.14.2\ncollecting ... collected 1 item\n\n..\\function_1.1\\tests\\test_inspect.py::test_lesson_manager_lifecycle PASSED [100%]\n\n============================== 1 passed in 0.12s ==============================",
+  "compiler_output": "============================= test session starts =============================\nplatform win32 -- Python 3.14.6, pytest-9.1.1, pluggy-1.6.0 -- C:\\Users\\Eleanora\\AppData\\Local\\Programs\\Python\\Python314\\python.exe\ncachedir: .pytest_cache\nrootdir: C:\\projects-py\nplugins: anyio-4.14.2\ncollecting ... collected 1 item\n\n..\\function_1.1\\tests\\test_inspect.py::test_lesson_manager_lifecycle PASSED [100%]\n\n============================== 1 passed in 0.09s ==============================",
   "security_output": "",
   "review_result": {},
   "research_data": [
-    {
-      "step": 1,
-      "title": "Initialize Lessons Folders and Verify Lesson Manager",
-      "details": "Inspect and update tools/lesson_manager.py to ensure it initializes lessons/observations/, lessons/candidates/, lessons/promoted/, and lessons/deprecated/ folders. Implement helper functions to create observation JSONs on failure, load promoted lessons, and transition lessons between states."
-    },
-    {
-      "step": 2,
-      "title": "Configure HITL and Status Files",
-      "details": "Add HITL_EVERY_N_CYCLES = 3 to config.py. Ensure status/current.md and status/last_summary.md are updated dynamically during the orchestrator loop in main.py."
-    },
-    {
-      "step": 3,
-      "title": "Implement Commands Folder Watcher",
-      "details": "In main.py, implement a periodic check of the commands/ directory. Supported command files (pause, continue, stop, note) should be parsed, executed, and then moved to commands/done/ to prevent reprocessing."
-    },
-    {
-      "step": 4,
-      "title": "Integrate Reviewer Failures with Lesson Lifecycle",
-      "details": "Modify agents/reviewer.py or main.py so that when a build/test run fails with a clear root cause, an observation JSON is automatically generated in lessons/observations/ using the lesson manager."
-    },
-    {
-      "step": 5,
-      "title": "Inject Promoted Lessons into Researcher Context",
-      "details": "Modify agents/researcher.py to load promoted lessons from lessons/promoted/ and inject them into the system prompt or context during the research phase."
-    },
-    {
-      "step": 6,
-      "title": "Implement HITL Pause Loop in Orchestrator",
-      "details": "In main.py, track completed iterations. Every N iterations, pause execution, write a summary to status/last_summary.md, and wait for operator input (either via stdin or a command file in commands/) before resuming or stopping."
-    },
-    {
-      "step": 7,
-      "title": "Smoke Verification",
-      "details": "Create a smoke test or run a verification script to ensure that the HITL pause, command processing, status updates, and lesson creation/injection work seamlessly together."
-    }
+    "Step 1: Inspect and update config.py to define HITL_EVERY_N_CYCLES = 3.",
+    "Step 2: Inspect tools/lesson_manager.py to ensure lessons/ subfolders (observations, candidates, promoted, deprecated) are initialized and that helper functions exist for creating observations and loading promoted lessons.",
+    "Step 3: Modify agents/researcher.py to accept promoted lessons and inject them into the system prompt or context.",
+    "Step 4: Modify agents/reviewer.py or main.py to detect build/test failures and automatically generate observation JSONs in lessons/observations/.",
+    "Step 5: Update main.py to maintain status/current.md during runs, track iteration count, and trigger HITL pauses every N cycles.",
+    "Step 6: Implement a commands/ directory watcher in main.py that checks for pause, continue, stop, and note files, processes them, and moves them to commands/done/.",
+    "Step 7: Implement the HITL pause loop in main.py, writing status/last_summary.md and waiting for operator input (via stdin or commands/ files).",
+    "Step 8: Run a smoke verification to ensure all components integrate and function correctly."
   ],
   "generated_code": {
     "target_file": "",
     "action": "modify",
-    "code": ""
+    "code": "An error occurred or the input was invalid. Let's try again."
   }
 }
