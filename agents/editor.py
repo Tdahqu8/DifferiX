@@ -28,6 +28,10 @@ def run_editor(state, project_files=""):
 CRITICAL TARGET FILE RULE:
 - Do NOT edit or create inspection files (e.g., test_inspect.py).
 - Focus strictly on core module implementation files specified in the plan (e.g., main.py, config.py, tools/lesson_manager.py).
+STRICT EXECUTION GUIDELINES:
+- NEVER write code that deliberately raises an Exception to inspect files or print contents (e.g., raise Exception("CONTENT_OF...")).
+- Implement requested business logic directly inside production files (main.py, config.py, tools/).
+- Do NOT create new files inside tests/ unless explicitly requested in the plan.
 REQUIRED RESPONSE FORMAT:
 First, specify the file name and action in the following format:
 TARGET_FILE: path/to/file.py

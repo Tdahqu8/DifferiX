@@ -4,7 +4,7 @@
   "status": "in_progress",
   "priority": "critical",
   "goal": "Complete foundation: 1) real HITL pause every N cycles with summary, 2) lessons lifecycle folders integrated with Reviewer, 3) status + commands control, 4) smoke verification.",
-  "current_step": "done",
+  "current_step": "research",
   "iteration_count": 0,
   "need_human": false,
   "warnings": [],
@@ -88,7 +88,7 @@
     {
       "step": 2,
       "title": "HITL every N cycles",
-      "status": "completed",
+      "status": "pending",
       "assigned_to": "editor",
       "details": [
         "Add HITL_EVERY_N_CYCLES to config.py",
@@ -98,7 +98,7 @@
     {
       "step": 3,
       "title": "Status + commands phone/git control",
-      "status": "completed",
+      "status": "pending",
       "assigned_to": "editor",
       "details": [
         "Write status/current.md and status/last_summary.md",
@@ -108,7 +108,7 @@
     {
       "step": 4,
       "title": "Integrate Reviewer -> observation lessons",
-      "status": "completed",
+      "status": "pending",
       "assigned_to": "editor",
       "details": [
         "On failed review with root_cause, call create_observation()",
@@ -118,7 +118,7 @@
     {
       "step": 5,
       "title": "Smoke integration check",
-      "status": "completed",
+      "status": "pending",
       "assigned_to": "reviewer + editor",
       "details": [
         "Verify all foundation features end-to-end"
@@ -140,46 +140,55 @@
     "commands/ files are processed and moved to commands/done/",
     "Smoke run verifies full pipeline"
   ],
-  "compiler_output": "============================= test session starts =============================\nplatform win32 -- Python 3.14.6, pytest-9.1.1, pluggy-1.6.0 -- C:\\Users\\Eleanora\\AppData\\Local\\Programs\\Python\\Python314\\python.exe\ncachedir: .pytest_cache\nrootdir: C:\\projects-py\nplugins: anyio-4.14.2\ncollecting ... collected 1 item\n\n..\\function_1.1\\tests\\test_inspect.py::test_lesson_manager_lifecycle PASSED [100%]\n\n============================== 1 passed in 0.11s ==============================",
+  "compiler_output": "============================= test session starts =============================\nplatform win32 -- Python 3.14.6, pytest-9.1.1, pluggy-1.6.0 -- C:\\Users\\Eleanora\\AppData\\Local\\Programs\\Python\\Python314\\python.exe\ncachedir: .pytest_cache\nrootdir: C:\\projects-py\nplugins: anyio-4.14.2\ncollecting ... collected 1 item\n\n..\\function_1.1\\tests\\test_inspect.py::test_lesson_manager_lifecycle PASSED [100%]\n\n============================== 1 passed in 0.19s ==============================",
   "security_output": "",
   "review_result": {},
   "research_data": {
-    "step_1_inspect_and_setup": {
-      "description": "Inspect the existing project structure, including `main.py`, `config.py`, and `tools/lesson_manager.py`. Ensure that the lessons subdirectories (`lessons/observations/`, `lessons/candidates/`, `lessons/promoted/`, `lessons/deprecated/`) are initialized and ready.",
-      "files_to_inspect": [
-        "main.py",
-        "config.py",
-        "tools/lesson_manager.py"
+    "step_1_lessons_lifecycle": {
+      "description": "Initialize and verify the lessons folder structure and helper functions.",
+      "actions": [
+        "Inspect `tools/lesson_manager.py` to see existing helper functions.",
+        "Ensure the directories `lessons/observations/`, `lessons/candidates/`, `lessons/promoted/`, and `lessons/deprecated/` are automatically created on startup.",
+        "Implement or verify helper functions to create observation JSONs, promote lessons, and load promoted lessons."
       ]
     },
-    "step_2_hitl_and_commands_control": {
-      "description": "Implement the HITL pause mechanism and commands control in `main.py` and `config.py`.",
-      "details": [
-        "Add `HITL_EVERY_N_CYCLES = 3` to `config.py`.",
-        "Track iteration count in `main.py`. Every N iterations, pause the cycle, write a summary to console and `status/last_summary.md`, and wait for operator input or command files.",
-        "Create a `commands/` directory and a `commands/done/` directory.",
-        "Implement a periodic check of the `commands/` directory for files like `pause`, `continue`, `stop`, or `note`. Once processed, move them to `commands/done/`.",
-        "Update `status/current.md` during each iteration with the current status of the run."
+    "step_2_hitl_config_and_logic": {
+      "description": "Implement the HITL pause and resume logic with console and file-based interaction.",
+      "actions": [
+        "Add `HITL_EVERY_N_CYCLES = 3` to `config.py` if not already present.",
+        "In `main.py`, track the completed iteration count.",
+        "After every `HITL_EVERY_N_CYCLES` iterations, trigger a pause.",
+        "Write a summary of the completed cycles to `status/last_summary.md` and print it to the console.",
+        "Wait for operator input via console (`input()`) or via command files in `commands/`.",
+        "Support operator replies: `continue`, `stop`, and `note:<text>`."
       ]
     },
-    "step_3_lessons_lifecycle_integration": {
-      "description": "Integrate the lessons lifecycle with the Reviewer and Researcher components.",
-      "details": [
-        "In the Reviewer component (or where build/test results are processed), if a build/test fails with a clear root cause, call `tools.lesson_manager.create_observation()` to save the failure details.",
-        "In the Researcher initialization in `main.py`, load promoted lessons using `tools.lesson_manager.get_promoted_lessons()` and inject them into the Researcher's context or system prompt."
+    "step_3_phone_git_control": {
+      "description": "Implement file-based remote control via the `commands/` directory and status updates.",
+      "actions": [
+        "Create the `commands/` and `commands/done/` directories if they do not exist.",
+        "Implement a periodic check in the main loop of `main.py` to scan `commands/` for files named `pause`, `continue`, `stop`, or `note` (or files containing those commands).",
+        "When a command file is detected, process it, log the action, and move the file to `commands/done/` (with a timestamp or unique name to avoid collisions).",
+        "Update `status/current.md` at the start of each iteration with the current step, iteration count, and status."
       ]
     },
-    "step_4_smoke_verification": {
-      "description": "Create a smoke verification script to verify all foundation pieces work together.",
-      "details": [
-        "Create `smoke_check.py` to simulate a full run, trigger a HITL pause, process a command file, generate a failed build to trigger an observation, and verify all directories and files are updated correctly.",
-        "Ensure the script runs successfully and does not violate any constraints (e.g., do not edit `test_inspect.py` or create dummy inspection test files)."
+    "step_4_reviewer_and_researcher_integration": {
+      "description": "Integrate lessons into the Reviewer and Researcher components.",
+      "actions": [
+        "Modify the Reviewer component (or the review step in `main.py`) so that if a build/test fails with a clear root cause, an observation JSON is written to `lessons/observations/`.",
+        "Modify the Researcher component (or the prompt generation in `main.py`) to load all JSON files from `lessons/promoted/` and inject their contents into the system prompt or context."
+      ]
+    },
+    "step_5_smoke_verification": {
+      "description": "Verify the entire pipeline end-to-end.",
+      "actions": [
+        "Create a smoke test script or run a short verification loop to confirm that status files are updated, command files are processed, HITL pauses trigger correctly, and lessons are loaded/saved."
       ]
     }
   },
   "generated_code": {
-    "target_file": "config.py",
-    "action": "create",
-    "code": "import os\n\n# Temporary inspection to read tools/lesson_manager.py\nif os.path.exists(\"tools/lesson_manager.py\"):\n    with open(\"tools/lesson_manager.py\", \"r\", encoding=\"utf-8\") as f:\n        content = f.read()\n    raise Exception(f\"CONTENT_OF_LESSON_MANAGER:\\n{content}\")\nelse:\n    raise Exception(\"tools/lesson_manager.py not found\")"
+    "target_file": "main.py",
+    "action": "modify",
+    "code": "# Temporary inspection to understand existing structure and implement the requested features.\nimport os\n\ndef inspect_files():\n    files_to_inspect = [\n        \"config.py\",\n        \"tools/lesson_manager.py\",\n        \"main.py\"\n    ]\n    print(\"=== INSPECTION START ===\")\n    for f in files_to_inspect:\n        if os.path.exists(f):\n            print(f\"--- FILE: {f} ---\")\n            with open(f, \"r\") as file:\n                print(file.read())\n        else:\n            print(f\"--- FILE: {f} (NOT FOUND) ---\")\n    print(\"=== INSPECTION END ===\")\n\nif __name__ == \"__main__\":\n    inspect_files()"
   }
 }

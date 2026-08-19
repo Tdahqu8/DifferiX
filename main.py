@@ -267,22 +267,40 @@ class OrchestratorConsole:
                 if success:
                     console.print(Panel(log, title="Build/Test Log - Success", border_style="bold green"))
                     
-                    # 1. Update plan step statuses
-                    plan = state.get("plan", [])
+                    # 1. Normalize and sanitize plan data structure
+                    raw_plan = state.get("plan", [])
+                    if not isinstance(raw_plan, list):
+                        raw_plan = []
+
+                    plan = []
+                    for item in raw_plan:
+                        if isinstance(item, dict):
+                            plan.append(item)
+                        elif isinstance(item, str):
+                            plan.append({"title": item, "status": "pending"})
+                    
+                    state["plan"] = plan
+
+                    # 2. Advance status of the first active pending step
                     step_updated = False
-                    for step_item in plan:
-                        if isinstance(step_item, dict) and step_item.get("status") == "pending":
+                    for step_item in state["plan"]:
+                        if step_item.get("status") == "pending":
                             step_item["status"] = "completed"
                             step_updated = True
                             console.print(f"[bold green]Plan step completed:[/bold green] {step_item.get('title', 'Subtask')}")
                             break
 
-                    # 2. Check if all plan steps are finished
-                    pending_steps = [s for s in plan if isinstance(s, dict) and s.get("status") == "pending"]
+                    # 3. Recalculate remaining pending steps
+                    pending_steps = [s for s in state["plan"] if s.get("status") == "pending"]
+                    total_steps = len(state["plan"])
 
-                    if pending_steps:
-                        # Loop back to research/edit for remaining plan items
-                        console.print(f"[bold yellow]Build passed, but {len(pending_steps)} plan step(s) remain. Continuing cycle...[/bold yellow]")
+                    # 4. Strict Completion Gate: Requires a non-empty plan AND zero pending steps
+                    if pending_steps or total_steps == 0:
+                        if total_steps == 0:
+                            console.print("[bold red]Warning: Plan is empty or uninitialized. Re-routing to research...[/bold red]")
+                        else:
+                            console.print(f"[bold yellow]Build passed, but {len(pending_steps)} step(s) remain. Continuing cycle...[/bold yellow]")
+                        
                         state["current_step"] = "research"
                         self.save_state(state)
                         
@@ -294,13 +312,13 @@ class OrchestratorConsole:
 
                         self.logger.record_iteration(state, diff_data=current_diff)
                     else:
-                        # Fully finished only when no pending plan items remain
+                        # Fully finished ONLY when a valid, non-empty plan has zero pending steps remaining
                         state["current_step"] = "done"
                         self.save_state(state)
 
                         try:
                             repo = get_repo()
-                            make_auto_commit(repo, "orchestrator", "Success after debugging")
+                            make_auto_commit(repo, "orchestrator", "Success - All plan steps verified")
                             create_success_tag(repo)
                         except Exception as e:
                             console.print(f"[bold red]Git Checkpoint Error:[/bold red] {e}")
