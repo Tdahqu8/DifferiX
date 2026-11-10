@@ -1,0 +1,7 @@
+{
+    "id": "id_renumber_requires_ref_update",
+    "root_cause": "A step-splitting operation created sub-steps that inherited the parent's ID, then a later renumber pass assigned fresh sequential IDs but did not update the depends_on references that had been set against the old IDs. Dependencies silently pointed at unrelated steps.",
+    "details": {
+        "rule": "When renumbering a collection, update every reference to the renamed identifiers in the same atomic operation. Or use positional references that survive renumbering. Stale references that resolve to a valid but wrong target are worse than dangling references."
+    }
+}

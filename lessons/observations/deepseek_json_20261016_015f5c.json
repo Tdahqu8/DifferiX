@@ -1,0 +1,7 @@
+{
+    "id": "fallback_bounded_by_match_region",
+    "root_cause": "A whitespace-tolerant SEARCH/REPLACE fallback operated on the entire file: it stripped whitespace from the whole content and rewrote the file globally when the search block was not found. Unrelated whitespace across the file was lost.",
+    "details": {
+        "rule": "Any fallback that operates on a file must be bounded by the match region. Whole-file rewrites triggered by a failed localized match are always a bug. If you cannot locate the region, fail the operation, do not fall through to a whole-file transformation."
+    }
+}

@@ -1,0 +1,67 @@
+===============================================================================
+                       f(x) ORCHESTRATOR - PROGRESS LOG
+===============================================================================
+Last Updated: August 21, 2026
+System Status: ACTIVE / PRODUCTION-READY
+
+-------------------------------------------------------------------------------
+1. MULTI-AGENT PIPELINE
+-------------------------------------------------------------------------------
+* Researcher Agent:
+  - Generates structural analysis and step-by-step implementation plans.
+  - Dynamically inspects project file listings and directory trees.
+
+* Editor Agent:
+  - Executes focused code edits using lightweight SEARCH/REPLACE diff matching.
+  - Reads target files directly, reducing context overhead to ~4k tokens/cycle.
+  - Auto-formats output payloads and strips unnecessary full-file duplicates.
+
+* Reviewer Agent:
+  - Runs code quality and structural audits on code diffs.
+  - Rejects stub code, missing imports, or non-functional edits.
+  - Emits structured verdict (ACCEPT / REJECT) with detailed diagnostic feedback.
+
+-------------------------------------------------------------------------------
+2. ORCHESTRATION & STATE MANAGEMENT
+-------------------------------------------------------------------------------
+* Dynamic State Engine (state.json):
+  - Tracks current execution step (research -> edit -> review -> done).
+  - Maintains task execution history, compiler outputs, and iteration counts.
+  - Automatic schema normalization for legacy state key mappings.
+
+* Feedback Loop & Rejection Recovery:
+  - Captures Reviewer feedback and compiler errors into compiler_output.
+  - Feeds exact rejection reasons back into subsequent Editor prompts.
+  - Auto-reverts bad file writes on disk back to pre-edit state upon rejection.
+
+* Human-In-The-Loop (HITL):
+  - Automatic checkpoint pauses every N cycles (configured via config.py).
+  - Operator prompt allowing manual inspection or execution override.
+
+-------------------------------------------------------------------------------
+3. TOOLING & INFRASTRUCTURE
+-------------------------------------------------------------------------------
+* Universal Build Verification (tools/compiler.py):
+  - Automatic environment detection and test execution across multiple languages.
+
+* Security Interceptor (tools/security_filter.py):
+  - Static AST/pattern analysis before writing code to disk.
+  - Blocks forbidden security patterns, destructive file ops, and dangerous calls.
+
+* File Sandbox & Management (tools/file_manager.py):
+  - Safe local file read/write operations restricted to specified workspace paths.
+
+* Project Structure Synchronization (tools/project_scanner.py):
+  - Dynamic generation and synchronization of tracked file trees.
+
+* Version Control & Changelogs (tools/backup_manager.py & changelog_engine.py):
+  - Structured reasoning logging into ./iteration_logs.
+  - Unified diff generation for code changes across cycles.
+
+-------------------------------------------------------------------------------
+4. API & MODEL ROUTING
+-------------------------------------------------------------------------------
+* Google AI Studio / Gemini Integration:
+  - Fully compatible with OpenAI API spec base URLs (/v1beta/openai/).
+  - Configured for current production endpoint: gemini-3.6-flash.
+===============================================================================

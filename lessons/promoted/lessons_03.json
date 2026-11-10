@@ -1,0 +1,8 @@
+
+{
+    "id": "independent_pair_vo_geometry",
+    "root_cause": "Assuming sequential trajectory data (time-series) in decoupled frame pairs, leading to invalid temporal smoothing filters (EMA, SO(3) geodesic velocity dampening).",
+    "details": {
+        "rule": "Always verify if visual odometry / pose estimation datasets consist of continuous video streams or independent image pairs before applying temporal trajectory logic. Never apply motion priors, velocity decay, or EMA/geodesic smoothing to unconstrained or randomized pairwise test data."
+    }
+}

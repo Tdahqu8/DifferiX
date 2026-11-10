@@ -1,0 +1,7 @@
+{
+    "id": "structured_llm_output_needs_headroom",
+    "root_cause": "A reviewer model was capped at max_tokens=512 for a JSON response with a free-form reason field. Responses were truncated mid-string, all three JSON parse attempts failed, and the fallback parser returned a raw fragment as the verdict reason.",
+    "details": {
+        "rule": "When an LLM's output is parsed as structured data, set max_tokens to at least 2x the expected payload size and cap every free-form field with an explicit character limit in the system prompt. Add a partial-JSON extractor as a last-resort parser."
+    }
+}

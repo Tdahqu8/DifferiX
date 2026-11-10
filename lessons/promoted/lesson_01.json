@@ -1,0 +1,7 @@
+{
+    "id": "test_01",
+    "root_cause": "Empty target file search block rule",
+    "details": {
+        "rule": "When editing an empty file, search block must be empty."
+    }
+}

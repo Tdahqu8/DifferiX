@@ -1,0 +1,7 @@
+{
+    "id": "external_service_requires_health_probe",
+    "root_cause": "A placeholder API key for an embedding provider was accepted at startup because the factory did not probe the credential. The first real embed call failed mid-cycle, after the provider had already been selected and other work had been done.",
+    "details": {
+        "rule": "Any external service integration must probe the credential on startup with a cheap call and refuse to select the provider when the probe fails. Placeholder values must be rejected explicitly, not silently degraded to a fallback that hides the failure."
+    }
+}

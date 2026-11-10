@@ -1,0 +1,7 @@
+{
+    "id": "single_llm_call_line_budget",
+    "root_cause": "A CSS file estimated at 180 lines required 400+ lines of output and hit the max_tokens ceiling mid-rule, producing an unterminated declaration that was rejected by the reviewer after a full cycle was spent.",
+    "details": {
+        "rule": "Budget any single editor call for at most ~250 lines of output. When estimated_lines exceeds a threshold well below the token limit, split the write into sequential sub-steps on the same target file. Estimations are unreliable; use a conservative threshold with margin."
+    }
+}

@@ -1,0 +1,7 @@
+{
+    "id": "fallback_heuristic_must_be_permissive",
+    "root_cause": "Full-rewrite detection required a specific TARGET_FILE marker at the start of the editor's response. When the editor omitted the marker but still emitted a complete file, the response fell through to a strict SEARCH/REPLACE parser and was rejected, looping the pipeline.",
+    "details": {
+        "rule": "Detection heuristics that gate a fallback mode must be permissive, not strict. When ambiguous, prefer the fallback. A missed detection silently breaks the pipeline; a false positive only costs one extra validation pass."
+    }
+}

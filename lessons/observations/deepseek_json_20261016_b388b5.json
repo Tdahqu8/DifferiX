@@ -1,0 +1,7 @@
+{
+    "id": "plan_merge_preserves_completed_steps",
+    "root_cause": "The researcher regenerated a plan that re-emitted already-completed work as pending. The merge logic replaced the plan wholesale, so the pipeline re-attempted accepted steps and re-initialized state that had already been validated.",
+    "details": {
+        "rule": "When merging a new plan into existing state, preserve completed steps by status boundary. The researcher's prompt must include the full plan history with explicit COMPLETED/PENDING markers so the model does not re-emit finished work."
+    }
+}

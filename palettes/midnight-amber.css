@@ -1,0 +1,38 @@
+/* palettes/midnight-amber.css
+   Dark product landing palette. Load this FIRST, before any component CSS. */
+
+:root {
+  /* Surfaces */
+  --bg-primary:        #0a0c10;
+  --bg-secondary:      #12161f;
+  --bg-tertiary:       #181d28;
+  --bg-card:           #141821;
+  --bg-glass:          rgba(18, 22, 31, 0.72);
+
+  /* Accent */
+  --accent:            #f59e0b;
+  --accent-light:      #fbbf24;
+  --accent-dark:       #b45309;
+  --accent-glow:       rgba(245, 158, 11, 0.25);
+  --accent-soft:       rgba(245, 158, 11, 0.10);
+
+  /* Text */
+  --text-main:         #f3f4f6;
+  --text-muted:        #9ca3af;
+  --text-dim:          #6b7280;
+  --text-inverse:      #0a0c10;
+
+  /* Borders */
+  --border-subtle:     rgba(255, 255, 255, 0.06);
+  --border-medium:     rgba(255, 255, 255, 0.12);
+  --border-accent:     rgba(245, 158, 11, 0.35);
+
+  /* Typography */
+  --font-heading:      'Space Grotesk', system-ui, sans-serif;
+  --font-body:         'Inter', system-ui, sans-serif;
+  --font-mono:         'JetBrains Mono', monospace;
+
+  /* Motion */
+  --transition-fast:   0.15s cubic-bezier(0.16, 1, 0.3, 1);
+  --transition-smooth: 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}

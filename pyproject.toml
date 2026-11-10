@@ -1,0 +1,65 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vegex"
+version = "0.4.0"
+description = "VegeX Multi-Agent AI Development & Quality Assurance Environment"
+requires-python = ">=3.10"
+license = "MIT"
+authors = [
+    { name = "tdahq8" }
+]
+dependencies = [
+    "python-dotenv>=1.0.0",
+    "openai>=1.0.0",
+    "requests>=2.31.0",
+    "httpx>=0.27.0",
+    "pydantic>=2.0.0",
+    "rich>=13.0.0",
+    "GitPython>=3.1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+]
+embeddings = [
+    "fastembed>=0.3.0",
+]
+yaml = [
+    "PyYAML>=6.0",
+]
+
+[project.scripts]
+vegex = "main:run_cli"
+
+# --- Explicit package discovery (fixes flat-layout auto-discovery error) ---
+[tool.setuptools]
+py-modules = ["config", "main"]
+
+[tool.setuptools.packages.find]
+include = [
+    "memory*",
+    "tools*",
+    "agents*",
+    "cli*",
+    "commands*",
+]
+exclude = [
+    "lessons*",
+    "skills*",
+    "status*",
+    "iteration_logs*",
+    ".vegex*",
+    "tests*",
+]
+
+[tool.pytest.ini_options]
+markers = [
+    "unit: fast, no I/O, no network",
+    "integration: touches filesystem, uses tmp_path",
+    "llm: actually calls an LLM (expensive, skipped by default)",
+    "slow: takes more than 5 seconds",
+]

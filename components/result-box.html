@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="basic.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+        href="https://fonts.googleapis.com/css2?family=Yeseva+One&family=Forum&display=swap"
+        rel="stylesheet"
+    />
+    <style>
+        .result-row {
+            display: flex;
+            align-items: center;
+            margin-bottom: 14px;
+            height: 48px;
+            border: 2px solid var(--clr-primary);
+            border-radius: 24px;
+            overflow: hidden;
+        }
+
+        .result-label {
+            background-color: var(--clr-primary);
+            color: var(--clr-dark);
+            font-family: var(--ff-label);
+            font-size: 1.05rem;
+            width: 118px;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            font-weight: 500;
+        }
+
+        .result-output {
+            padding: 0 20px;
+            font-family: var(--ff-body);
+            font-size: 1.1rem;
+            color: var(--clr-dark);
+            display: flex;
+            align-items: center;
+            width: 100%;
+            height: 100%;
+            background-color: var(--clr-white);
+            user-select: all;
+            font-weight: 500;
+        }
+    </style>
+    <title>Result box</title>
+</head>
+<body>
+    <div class="result-row">
+        <div class="result-label">Something</div>
+        <div class="result-output" id="result">Output placeholder</div>
+    </div>
+</body>
+</html>

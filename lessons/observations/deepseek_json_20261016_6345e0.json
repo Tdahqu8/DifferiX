@@ -1,0 +1,7 @@
+{
+    "id": "agent_output_validated_against_plan",
+    "root_cause": "The editor returned a target_file that differed from the plan step's target_file. The pipeline silently accepted it, wrote to a file the plan did not expect, and marked the wrong step complete on the next review.",
+    "details": {
+        "rule": "When an agent can override the caller's target, validate the output against the plan. On mismatch, either update the plan's target in the same step or reject the write with explicit feedback. Silent divergence between plan and disk is a correctness bug."
+    }
+}

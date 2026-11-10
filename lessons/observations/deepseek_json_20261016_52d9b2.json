@@ -1,0 +1,7 @@
+{
+    "id": "reference_resolution_before_write",
+    "root_cause": "An HTML file referenced script.js and styles.css, but the plan created neither. The unresolved references were only detected by the coherence checker after the write, costing a full reject-and-retry cycle that the planner could have prevented.",
+    "details": {
+        "rule": "Every <link href>, <script src>, and CSS url() in a proposed file must resolve to a file the plan will produce. Validate the reference graph at plan time, not after the write. A reference to a not-yet-planned file is a planning error."
+    }
+}

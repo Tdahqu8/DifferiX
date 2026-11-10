@@ -1,0 +1,7 @@
+{
+    "id": "reviewer_needs_cross_file_context",
+    "root_cause": "The reviewer agent was asked to judge cross-file consistency while only receiving one file's diff. It approved HTML and CSS files that used completely disjoint class namespaces, because it had no way to observe that the two files disagreed.",
+    "details": {
+        "rule": "A reviewer that cannot see every file in a consistency group must receive a machine-computed cross-file report as authoritative input. Treat any coherence-report ERROR as blocking. Do not ask an LLM to derive properties from data it cannot observe."
+    }
+}

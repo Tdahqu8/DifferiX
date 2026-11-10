@@ -1,0 +1,7 @@
+{
+    "id": "no_overengineering_heuristic_clamps",
+    "root_cause": "Adding rigid kinematic thresholding and heuristic motion clamps (e.g., max angular speed limits, parallax degenerate thresholds) that zero out or distort valid high-angle relative motions.",
+    "details": {
+        "rule": "Do not hardcode artificial kinematic constraints or arbitrary parallax zeroing logic in low-level epipolar geometry pipelines. Let RANSAC/MAGSAC inlier ratios and pure Cheirality triangulations evaluate pose candidate validity."
+    }
+}

@@ -1,134 +1,374 @@
+import os
 import json
-from openai import OpenAI
+import re
 import config
+from tools.lesson_manager import get_promoted_lessons_prompt, create_observation
+from tools.skill_manager import get_combined_agent_skill
 
-client = OpenAI(
-    base_url=config.OPENROUTER_BASE_URL,
-    api_key=config.OPENROUTER_API_KEY,
-)
+try:
+    from tools.llm_client import safe_chat_completion
+except ImportError:
+    from llm_client import safe_chat_completion
 
-def run_reviewer(state):
-    system_prompt = """You are the AI Critic (Reviewer) in the f(x) system.
 
-Your task: verify the output of the Editor based STRICTLY on facts.
+def get_reviewer_model() -> str:
+    if hasattr(config, "get_active_model") and callable(getattr(config, "get_active_model")):
+        return config.get_active_model("reviewer")
+    if hasattr(config, "get_agent_model") and callable(getattr(config, "get_agent_model")):
+        return config.get_agent_model("reviewer")
+    return getattr(config, "MODEL_REVIEWER", "google/gemini-2.5-pro")
 
-You are provided with:
-1. compiler_output / test_output — actual execution log (build or tests)
-2. generated_code — what the Editor modified (target_file, action, code)
-3. research_data / plan — initial plan
-4. project_structure — current project structure
-5. existing warnings / lessons (if any)
 
-STRICT RULES:
-- You MUST NOT set is_approved=true if compiler_output/test_output contains errors, traceback, FAILED, error CS, Exception.
-- Do NOT approve code based on guesswork. The sole source of truth is the execution log.
-- If execution logs are missing, set is_approved=false and request the orchestrator to run the check.
-- If dangerous operations are present in the code (file deletion, shutil.rmtree, os.remove, pathlib.unlink, rm -rf, etc.), set is_approved=false.
-- Specify file paths relative to the project root, matching project_structure.
-
-RESPONSE FORMAT — STRICTLY JSON:
-{
-    "is_approved": false,
-    "verdict": "short verdict",
-    "root_cause": "why it broke / what went wrong (1-3 sentences)",
-    "fix_instruction": "specific instructions for the Editor on what to fix",
-    "dangerous_code_found": false,
-    "should_create_observation": true,
-    "observation_draft": {
-        "rule": "short rule for the future",
-        "why": "why this is important",
-        "tags": ["compiler", "path", "..."]
-    },
-    "reasoning_summary": "how you reached your conclusion (2-5 sentences)"
-}
-
-If is_approved=true:
-- fix_instruction can be empty
-- should_create_observation is usually false
-- reasoning_summary is still mandatory
-CRITICAL RULE ON TASK COMPLETION:
-- You are approving ONLY the current file edit, NOT the entire project goal.
-- Never set current_step to "done" in your reasoning. Only approve or reject the code change itself.
-- Prohibited operations: direct file deletions using os.remove or shutil.rmtree"""
-
-    # 1. Prune context to prevent overloading model context window
-    compiler_log = str(state.get("compiler_output", ""))
-    pruned_state = {
-        "iteration_count": state.get("iteration_count", 0),
-        "compiler_output": compiler_log[-3000:] if len(compiler_log) > 3000 else compiler_log,  # take tail of log
-        "generated_code": state.get("generated_code"),
-        "research_data": state.get("research_data"),
-        "warnings": state.get("warnings", [])
-    }
-
-    # 2. API call with guaranteed token margin
-    response = client.chat.completions.create(
-        model=config.MODEL_REVIEWER,
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": f"State: {json.dumps(pruned_state, ensure_ascii=False)}"}
-        ],
-        response_format={"type": "json_object"},
-        temperature=0.1,
-        max_tokens=2048
-    )
-    
-    # 3. Validate API response
-    if not response or not getattr(response, "choices", None) or len(response.choices) == 0:
-        raise RuntimeError("Reviewer: model returned an empty response or response.choices == None")
-
-    first_choice = response.choices[0]
-    if not first_choice or not getattr(first_choice, "message", None):
-        raise RuntimeError("Reviewer: missing message in model response")
-
-    result_text = (first_choice.message.content or "").strip()
-    if not result_text:
-        raise RuntimeError("Reviewer: model returned empty content string")
-
-    # 4. Safe JSON parsing with recovery (json_repair) and fallback
-    result = None
+def resolve_sandboxed_path(target_file: str, project_dir: str = ".") -> str:
+    base_path = os.path.abspath(project_dir)
+    target_path = os.path.abspath(os.path.join(base_path, target_file))
     try:
-        result = json.loads(result_text)
-    except json.JSONDecodeError:
+        contained = os.path.commonpath([base_path, target_path]) == base_path
+    except ValueError:
+        contained = False
+    if not contained:
+        raise PermissionError(f"SANDBOX VIOLATION: Reviewer path '{target_file}' escapes boundary.")
+    return target_path
+
+
+def _try_partial_json_extract(text: str) -> dict:
+    result: dict = {}
+    m = re.search(r'"is_approved"\s*:\s*(true|false)', text, re.IGNORECASE)
+    if m:
+        result["is_approved"] = m.group(1).lower() == "true"
+    m = re.search(r'"verdict"\s*:\s*"(ACCEPT|REJECT)"', text, re.IGNORECASE)
+    if m:
+        result["verdict"] = m.group(1).upper()
+    m = re.search(r'"reason"\s*:\s*"(.*)$', text, re.DOTALL)
+    if m:
+        raw = m.group(1)
+        cleaned = re.split(r'(?<!\\)"', raw, maxsplit=1)[0]
+        result["reason"] = cleaned.strip()
+    return result
+
+
+def parse_reviewer_payload(raw_text: str) -> dict:
+    if not raw_text or not isinstance(raw_text, str):
+        return {
+            "is_approved": False,
+            "verdict": "REJECT",
+            "root_cause": "Empty model output",
+            "reason": "Reviewer received empty text from LLM."
+        }
+
+    text = raw_text.strip()
+
+    fence_match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
+    if fence_match:
         try:
-            import json_repair
-            result = json_repair.loads(result_text)
-            print("[Reviewer]: Invalid JSON detected, successfully repaired via json_repair.")
-        except Exception:
-            print("[Reviewer]: Model truncated response. Performing soft rollback to edit step.")
-            result = {
-                "is_approved": False,
-                "verdict": "Reviewer response format error (JSON was truncated)",
-                "root_cause": "Model exceeded generation limit or truncated response mid-stream.",
-                "fix_instruction": "Parsing error occurred for review response. Retry or check file syntax."
+            return json.loads(fence_match.group(1))
+        except json.JSONDecodeError:
+            pass
+
+    start = text.find("{")
+    end = text.rfind("}")
+    if start != -1 and end != -1 and end > start:
+        try:
+            return json.loads(text[start:end + 1])
+        except json.JSONDecodeError:
+            pass
+
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+
+    if text.startswith("{") or text.startswith("```"):
+        partial = _try_partial_json_extract(text)
+        if "is_approved" in partial or "verdict" in partial:
+            return {
+                "is_approved": partial.get("is_approved", False),
+                "verdict": partial.get("verdict", "REJECT"),
+                "reason": partial.get("reason", text[:200]),
+                "_partial_parse": True,
             }
 
-    # 5. Process verdict and route state
-    if not result.get("is_approved", False):
-        fix_instruction = result.get("fix_instruction", "")
+    upper_text = text.upper()
+    is_accept = any(kw in upper_text for kw in [
+        "STATUS:** APPROVED",
+        "STATUS: APPROVED",
+        "VERDICT: ACCEPT",
+        "VERDICT: APPROVED",
+        '"IS_APPROVED": TRUE',
+        "\"VERDICT\": \"ACCEPT\""
+    ]) or (
+        "ACCEPT" in upper_text
+        and "REJECT" not in upper_text
+        and "DO NOT ACCEPT" not in upper_text
+        and "NOT ACCEPT" not in upper_text
+        and "CANNOT ACCEPT" not in upper_text
+        and "REFUSE" not in upper_text
+    )
 
-        if isinstance(state.get("research_data"), dict):
-            state["research_data"]["reviewer_fix"] = fix_instruction
-        elif isinstance(state.get("research_data"), str):
-            state["research_data"] += f"\n[Reviewer Fix]: {fix_instruction}"
-        else:
-            state["research_data"] = f"[Reviewer Fix]: {fix_instruction}"
+    reason_match = re.search(r"\*\*Analysis:\*\*\s*(.+)", text, re.DOTALL)
+    clean_reason = reason_match.group(1).strip() if reason_match else text[:300]
 
-        state["review_result"] = result
-        state["current_step"] = "edit"
-        state["iteration_count"] = state.get("iteration_count", 0) + 1
+    return {
+        "is_approved": is_accept,
+        "verdict": "ACCEPT" if is_accept else "REJECT",
+        "root_cause": "Parsed from Markdown text response." if is_accept else "Reviewer rejected changes.",
+        "reason": clean_reason
+    }
+
+def run_reviewer(state, project_dir=".", session_context="", coherence_report="", visual_context=""):
+    """
+    Run the reviewer agent.
+
+    Uses Tiered Context Assembly to bound token usage. The reviewed code
+    is rendered as a unified diff when possible (10-30x smaller than the
+    full file for small edits), falling back to a sliced view when no
+    prior content is available (new files).
+
+    Also fixes a stray `task_spec=...` no-op assignment that previously
+    appeared after the safe_chat_completion call.
+    """
+    from tools.context_assembler import (
+        ContextBundle,
+        Tier,
+        TierItem,
+        ContextAssembler,
+        smart_slice_code,
+        dedupe_logs,
+        render_code_diff,
+    )
+
+    # ---- Lessons (only when session_context is missing) ----
+    if session_context:
+        promoted_lessons = ""
     else:
-        state["review_result"] = result
-        state["current_step"] = "done"
-        
-    # 6. Extract token usage
-    usage = getattr(response, "usage", None)
-    prompt_tokens = getattr(usage, "prompt_tokens", 0) if usage else 0
-    completion_tokens = getattr(usage, "completion_tokens", 0) if usage else 0
+        from tools.lesson_manager import get_ranked_lessons_for_role
 
-    usage_meta = type('Meta', (), {
-        'prompt_token_count': prompt_tokens,
-        'candidates_token_count': completion_tokens
+        retrieval_query = " ".join(filter(None, [
+            str(state.get("active_subtask") or ""),
+            str(state.get("research_analysis") or ""),
+            str(state.get("goal") or ""),
+            str(state.get("target_file") or ""),
+        ])).strip() or "code review"
+
+        _, lessons_block, _ = get_ranked_lessons_for_role(
+            role="reviewer",
+            query=retrieval_query,
+            limit=getattr(config, "LESSONS_RETRIEVAL_LIMIT", 5),
+        )
+        promoted_lessons = lessons_block or get_promoted_lessons_prompt()
+
+    iteration_logs = state.get("iteration_logs") or state.get("compiler_output", "") or ""
+    skill_prompt = get_combined_agent_skill("reviewer", project_dir)
+
+    # System prompt — STRICT JSON only
+    coherence_rule = ""
+    if coherence_report:
+        coherence_rule = (
+            "\n- If the COHERENCE REPORT below contains any ERROR-level finding, "
+            "you MUST set is_approved to false. Cross-file coherence violations "
+            "are blocking and cannot be overridden by style or completeness."
+        )
+
+    system_prompt = (
+        f"{skill_prompt}\n\n"
+        f"CRITICAL REQUIREMENT:\n"
+        f"You MUST respond ONLY with a raw, valid JSON object matching this "
+        f"schema:\n"
+        f'{{"is_approved": true, "verdict": "ACCEPT", "reason": "Short summary."}}\n'
+        f"Rules:\n"
+        f"- reason MUST be under 150 characters.\n"
+        f"- Do NOT write Markdown headers or prose outside the JSON.\n"
+        f"- Do NOT nest JSON inside fields.\n"
+        f"- The first character of your response MUST be {{ and the last MUST be }}."
+        f"{coherence_rule}"
+    )
+
+    compiler_log = str(state.get("compiler_output", ""))
+    target_file = state.get("active_target_file") or state.get("target_file")
+
+    generated_data = state.get("generated_code")
+    code_content = (
+        generated_data.get("code")
+        if isinstance(generated_data, dict) else generated_data
+    )
+    apply_result = (
+        generated_data.get("apply_result")
+        if isinstance(generated_data, dict) else None
+    )
+
+    if target_file and not code_content:
+        try:
+            safe_target_path = resolve_sandboxed_path(target_file, project_dir)
+            if os.path.exists(safe_target_path):
+                with open(safe_target_path, "r", encoding="utf-8") as f:
+                    code_content = f.read()
+        except PermissionError as pe:
+            code_content = f"SANDBOX REJECTION: {pe}"
+
+    # Pruned state — NO code here (code lives in T2)
+    pruned_state = {
+        "iteration": state.get("iteration_count", 0),
+        "active_subtask": state.get("active_subtask", ""),
+        "target_file": target_file,
+    }
+    if isinstance(apply_result, dict):
+        pruned_state["patch_apply_status"] = {
+            "ok": apply_result.get("ok"),
+            "mode": apply_result.get("mode"),
+            "matched": apply_result.get("matched"),
+            "failed": apply_result.get("failed"),
+        }
+    injected_ids = state.get("active_lesson_node_ids") or []
+    if injected_ids:
+        pruned_state["injected_lesson_node_ids"] = list(injected_ids)
+
+    # ---- Build TCA bundle ----
+    bundle = ContextBundle()
+
+    # T0
+    bundle.add_text(Tier.T0_STATIC, "skills", system_prompt)
+
+    # T1: pruned state (spec, never cut)
+    bundle.add_text(
+        Tier.T1_ACTION_CORE,
+        "state",
+        f"=== STATE TO REVIEW ===\n{json.dumps(pruned_state, ensure_ascii=False)}",
+    )
+
+    # T2: the code under review — DIFF if possible, else sliced code
+    if code_content:
+        old_code = state.get("old_code_backup", "") or ""
+        diff_view = render_code_diff(old_code, code_content, target_file or "file")
+
+        if diff_view:
+            bundle.add_text(Tier.T2_TARGET_SLICE, "diff", diff_view)
+        else:
+            hints = " ".join(filter(None, [
+                str(state.get("active_subtask") or ""),
+                str(state.get("research_analysis") or "")[:400],
+            ]))
+            sliced = smart_slice_code(
+                code_content, target_file or "file", max_lines=200, hints=hints
+            )
+            tightly = smart_slice_code(
+                code_content, target_file or "file", max_lines=60, hints=hints
+            )
+            bundle.add(TierItem(
+                tier=Tier.T2_TARGET_SLICE,
+                key="code",
+                content=(
+                    f"=== CODE TO REVIEW ({target_file}) ===\n{sliced}"
+                ),
+                fallback_content=(
+                    f"=== CODE TO REVIEW ({target_file}) [HEAVILY TRUNCATED] ===\n{tightly}"
+                    if tightly != sliced else ""
+                ),
+                optional=False,
+            ))
+
+    # T3: coherence (blocking) > visual > session
+    if coherence_report:
+        bundle.add_text(
+            Tier.T3_INTERFACE,
+            "coherence",
+            "=== COHERENCE REPORT (machine-generated, authoritative) ===\n"
+            + coherence_report,
+        )
+    if visual_context:
+        bundle.add_text(
+            Tier.T3_INTERFACE,
+            "visual",
+            "=== VISUAL REVIEW (machine-generated) ===\n" + visual_context,
+        )
+    if session_context:
+        bundle.add_text(Tier.T3_INTERFACE, "session", session_context)
+
+    # T4: lessons
+    if promoted_lessons:
+        bundle.add_text(
+            Tier.T4_ENRICHMENT,
+            "lessons",
+            f"=== RELEVANT LESSONS (A-SCORE RANKED) ===\n{promoted_lessons}",
+        )
+
+    # T5: deduped logs
+    if iteration_logs.strip():
+        deduped = dedupe_logs(iteration_logs, max_errors=5)
+        if deduped:
+            bundle.add_text(
+                Tier.T5_FEEDBACK,
+                "logs",
+                f"=== RECENT EXECUTION LOGS (deduplicated) ===\n{deduped}",
+                optional=True,
+            )
+
+    # ---- Assemble ----
+    budget = getattr(config, "TOKEN_BUDGET_REVIEWER", 14000)
+    assembled = ContextAssembler(
+        budget=budget,
+        safety_margin=getattr(config, "TCA_SAFETY_MARGIN", 0.9),
+    ).assemble(bundle)
+
+    if getattr(config, "TCA_LOG_SUMMARY", True):
+        try:
+            print(assembled.log_summary())
+        except Exception:
+            pass
+
+    # ---- Call LLM ----
+    active_model = get_reviewer_model()
+
+    response, provider = safe_chat_completion(
+        role_or_model="reviewer",
+        messages=[
+            {"role": "system", "content": assembled.system_prompt},
+            {"role": "user", "content": assembled.user_prompt},
+        ],
+        temperature=0.1,
+        max_tokens=4096,
+        task_spec=str(state.get("active_subtask") or state.get("target_file") or ""),
+    )
+
+    if not response or not getattr(response, "choices", None) or not response.choices:
+        raise RuntimeError("Reviewer: Empty response from model.")
+
+    result_text = (response.choices[0].message.content or "").strip()
+    result = parse_reviewer_payload(result_text)
+
+    raw_approved = result.get("is_approved")
+    if isinstance(raw_approved, str):
+        is_approved = raw_approved.lower() in ("true", "1", "yes")
+    elif isinstance(raw_approved, bool):
+        is_approved = raw_approved
+    else:
+        is_approved = str(result.get("verdict", "")).upper() == "ACCEPT"
+
+    result["is_approved"] = is_approved
+    result["verdict"] = "ACCEPT" if is_approved else "REJECT"
+
+    if not result.get("reason"):
+        result["reason"] = (
+            result.get("root_cause")
+            or result.get("fix_instruction")
+            or ("Edits approved successfully." if is_approved else "Edits rejected by reviewer.")
+        )
+
+    if not is_approved and result.get("create_observation"):
+        obs_file = create_observation(
+            root_cause=result.get("root_cause", "Reviewer rejected implementation"),
+            details={"fix_instruction": result.get("fix_instruction", "")},
+        )
+        print(f"[Lesson Manager] Observation created by Reviewer: {obs_file}")
+
+    state["review_result"] = result
+
+    usage = getattr(response, "usage", None)
+    usage_meta = type("Meta", (), {
+        "prompt_token_count": getattr(usage, "prompt_tokens", 0) or 0,
+        "candidates_token_count": getattr(usage, "completion_tokens", 0) or 0,
+        "raw_response": result_text,
+        "provider": provider,
+        "model_id": active_model,
     })
-    
+
     return state, usage_meta

@@ -1,0 +1,329 @@
+===============================================================================
+                       VegeX ORCHESTRATOR - PROGRESS LOG
+===============================================================================
+Last Updated: October 6, 2026
+System Status: ACTIVE / PRODUCTION-READY
+Tested Toolchain: Python 3.12 / AsyncIO Sandbox Runner
+Memory Subsystem: v0.3.0 (SQLite A-Score + Lesson Bridge)
+Structure Index:   v2.0.0 (SHA-256 content-hash AST)
+
+-------------------------------------------------------------------------------
+0. RECENT ARCHITECTURAL WORK — OCTOBER 2026
+-------------------------------------------------------------------------------
+Consolidated five subsystems that had drifted apart during early RSI loops.
+The five subsystems below now share a single source of truth per concern:
+
+* Memory subsystem (NEW) — `memory/` package. A-Score ranked, SQLite-backed
+  storage for all memory units, including lessons. Replaces the abandoned
+  LanceDB dual-storage MVP (deleted `database.py`).
+
+* Lesson bridge (NEW) — `tools/lesson_memory_bridge.py`. Syncs the legacy
+  JSON lesson files into the memory subsystem. JSON remains the source of
+  truth for lesson content; SQLite holds the ranking signals
+  (base_trust, trigger_count, helpful_count, violation_count, is_critical,
+  scope, timestamps).
+
+* Structure index (NEW) — `tools/structure_index.py`. Byte-deterministic
+  AST index with SHA-256 content hashing. Replaces the mtime+size fingerprint
+  that silently missed same-second and same-size edits.
+
+* Contract validator (NEW) — `tools/contract_validator.py`. Pre-write check
+  against the structure index. Blocks calls to non-existent names, deprecated
+  methods, and unresolvable imports. Fails open on internal error.
+
+* Atomic changeset (NEW) — `tools/atomic_changeset.py`. Multi-file writes are
+  staged and applied as one transaction, with rollback on any failure. This
+  was the root cause of the RSI crash — partial multi-file edits left the
+  tree inconsistent between cycles.
+
+* Session ADR (NEW) — `tools/session_adr.py`. Append-only JSONL history of
+  cross-cycle decisions. Compacted after 400 entries.
+
+* Handshake (NEW) — `tools/handshake.py`. Deterministic, budget-aware session
+  context assembled per agent call. Sections: task brief, active plan,
+  relevant module signatures, recent ADR, A-Score ranked lessons.
+
+* Drift guard (NEW) — `tools/drift_guard.py`. Content pinning at pipeline
+  transitions. Detects external edits to `state.json` or target files and
+  adapts by reloading from disk — never aborts the loop.
+
+Also fixed:
+  - `agents_chat.py` — wrong kwarg to `safe_chat_completion` (`model_name=`
+    → `role_key`). The `msg` command now works.
+  - `pyproject.toml` — entry point pointed at non-existent `main:main`.
+    Now `main:run_cli`; the `vegex` console script works.
+  - `editor.py` — the SEARCH/REPLACE whitespace fallback was replacing the
+    entire file with a stripped-whitespace copy. Now replaces only the
+    matched region against original content.
+  - `reviewer.py` — negation-blind freeform parser accepted "DO NOT ACCEPT"
+    as approval. Now checks for "DO NOT ACCEPT", "NOT ACCEPT", "CANNOT
+    ACCEPT", "REFUSE" as explicit rejection signals.
+  - `changelog_engine.py` — crashed when `generated_code` was a string
+    (editor full-rewrite mode). Also: `LOGS_DIR` was cwd-relative and
+    wrote into the wrong project when launched from elsewhere.
+
+-------------------------------------------------------------------------------
+1. MULTI-AGENT PIPELINE
+-------------------------------------------------------------------------------
+* Researcher Agent:
+  - Generates structural analysis and atomic step-by-step plans.
+  - Receives A-Score ranked lessons scoped to `promoted + candidates +
+    observations` (super-user role).
+  - Persists the injected lesson node IDs to state so the review step can
+    attribute H (helpful) / V (violated) feedback correctly.
+  - Accepts `session_context` kwarg from handshake.
+
+* Editor Agent:
+  - Executes focused code edits via SEARCH/REPLACE diff matching against
+    existing file content; full-rewrite mode for new/empty files only.
+  - Receives A-Score ranked lessons scoped to `promoted` (consumer role).
+  - Two-phase pre-write: contract validation against structure index,
+    then atomic multi-file apply via ChangeSet.
+  - Accepts `session_context` kwarg from handshake.
+
+* Reviewer Agent:
+  - Runs code quality and structural audits on code diffs.
+  - Rejects stub code, missing imports, or non-functional edits.
+  - Sees the exact set of lesson node IDs that were injected into the
+    editor's context. Can cite specific rules the editor failed to follow.
+  - Emits structured verdict (ACCEPT / REJECT) with diagnostic feedback.
+  - Accepts `session_context` kwarg from handshake.
+
+-------------------------------------------------------------------------------
+2. ORCHESTRATION & STATE MANAGEMENT
+-------------------------------------------------------------------------------
+* Dynamic State Engine (state.json):
+  - Tracks current execution step (research -> edit -> review -> done).
+  - Automatic schema normalization for legacy flat-key state maps.
+  - Framework-scoped registry at `<framework_root>/.vegex/projects_registry.json`.
+    One-time silent migration from the legacy `./projects_registry.json`.
+
+* Feedback Loop & Rejection Recovery:
+  - Captures Reviewer feedback and compiler errors into `compiler_output`.
+  - Feeds exact rejection reasons back into the editor prompt.
+  - Reverts bad writes on disk back to pre-edit state upon rejection.
+
+* Validation Gate (Phase 3b):
+  - Runs the contract validator against a synthetic change set BEFORE any
+    disk write. On failure, feeds the AST error trace to the editor and
+    increments `edit_retries`. Max 3 retries before reverting to research.
+  - Fails open on validator internal error — the sandbox remains the
+    authority; validation is a filter, not a hard gate.
+
+* Drift Guard (Phase 6):
+  - Pins `state.json` and the active target file at pipeline transitions.
+  - On drift, reloads state from disk and continues with the external
+    changes as the new truth.
+  - Preserves user edits to the target file — the pipeline re-invokes the
+    editor against the user's version rather than reverting it.
+  - Design assumption: single-process pipeline, external edits from a
+    parallel terminal. Multi-process concurrent writes not yet locked.
+
+* Human-In-The-Loop (HITL):
+  - Automatic checkpoint pauses every N cycles (config.HITL_EVERY_N_CYCLES).
+  - Feedback path writes to `state["human_feedback"]` and resets to research.
+  - Resource-limit override prompt (extend iterations / stop).
+
+-------------------------------------------------------------------------------
+3. MEMORY & LESSON SUBSYSTEM
+-------------------------------------------------------------------------------
+* `memory/` Package:
+  - `schemas.py` — `MemoryNode`, `MemoryScope`, `RankingWeights`,
+    `ScoredMemoryNode`, and the exception hierarchy
+    (MemoryStorageError, DimensionMismatchError, MemoryNotFoundError,
+    MemoryValidationError).
+  - `storage.py` — `SQLiteMemoryStorage`. Thread-safe, WAL mode. Stores
+    payload (vector, content, metadata) plus A-Score signals
+    (base_trust, trigger_count, helpful_count, violation_count,
+    is_critical, scope_type, scope_value, created_at, last_used_at).
+  - `ranker.py` — Activation Score formula:
+        A = [ (B · (1 + H) · Sim^α · ScopeMatch) / (T + 2 + V) ]
+            · e^(−λ_eff · Δt)  +  ε
+        λ_eff = λ_base / (1 + β · 1_critical)
+    Deterministic jitter for tie-breaks derived from SHA-256 of node_id.
+  - `manager.py` — `MemoryManager`. `add`, `get`, `search`, `record_trigger`,
+    `record_helpful`, `record_violation`, `promote`, `delete`, `clear`.
+
+* Lesson Bridge (`tools/lesson_memory_bridge.py`):
+  - Walks `lessons/*/*.json` on demand; upserts into SQLite keyed by
+    `lesson:{lesson_id}`. Preserves T/H/V/last_used_at across content edits
+    and stage promotions.
+  - Content-hash diff avoids redundant work: unchanged lessons are skipped.
+  - `HashEmbeddingProvider` — deterministic bag-of-words hashing into 256
+    dims. Zero dependency. Swap for OpenAI `text-embedding-3-small` or
+    Voyage by passing `embedding_provider=` to the bridge constructor.
+  - Stage trust mapping:
+        observations → base_trust=0.3, is_critical=False
+        candidates   → base_trust=0.5, is_critical=False
+        promoted     → base_trust=1.0, is_critical=True
+        deprecated   → base_trust=0.1, is_critical=False
+
+* `tools/lesson_manager.py`:
+  - File layer (create/move/load/format) unchanged.
+  - New ranked-retrieval API:
+        get_ranked_lessons_for_role(role, query, limit, record_trigger=False)
+        → (scored_list, context_string, node_ids)
+  - New feedback API:
+        record_lesson_trigger(node_ids)
+        record_lesson_helpful(node_ids)
+        record_lesson_violation(node_ids)
+  - `analyze_lesson_outcome(build_success, build_log, injected_ids)` decides
+    H vs V per the blueprint: H for all injected on pass; V only for lessons
+    whose distinctive keywords appear in the failure log.
+
+* Role-Based Access Control:
+  - researcher / superuser / architect → promoted + candidates + observations
+  - editor, reviewer, others           → promoted only
+
+* Determinism contract:
+  - `build_session_context` is pure. It never records triggers, never writes
+    to SQLite. Consecutive calls with identical inputs produce byte-identical
+    output — preserves provider-side prompt caching.
+  - Trigger recording is a separate, explicit call:
+    `record_lesson_trigger()` from the caller, once per real injection.
+
+-------------------------------------------------------------------------------
+4. TOOLING & INFRASTRUCTURE
+-------------------------------------------------------------------------------
+* Universal Build Verification (`tools/compiler.py`):
+  - Routes by file extension: `.cs` → dotnet/msbuild; `.xml` → XML syntax
+    check; `.json` → JSON parse check; other → asset file no-op.
+  - NOTE: `.py` edits currently return success without invoking Python's
+    parser. The reviewer + validator cover the gap, but adding
+    `py_compile` to `run_universal_build` is a pending improvement.
+
+* Security Interceptor (`tools/security_filter.py`):
+  - Two-layer scan: regex over comment-stripped source (any language),
+    plus AST walk for Python Call nodes with resolved attribute chains.
+  - Blocks eval/exec/compile/__import__, subprocess family, destructive
+    file ops, pickle/marshal deserialization, ctypes native loading, and
+    dynamic `getattr(os|subprocess|shutil|pickle|marshal|ctypes, ...)`.
+  - Known gaps (documented, by design): module aliasing
+    (`import os as o; o.system(...)`) and runtime-built strings.
+
+* File Sandbox (`tools/file_manager.py`):
+  - Read/write restricted to the active project root. String-typed error
+    returns preserved for backward compatibility.
+
+* Atomic ChangeSet (`tools/atomic_changeset.py`):
+  - Stage-to-temp + `os.replace` per file, all-or-nothing across the set.
+  - Rollback restores original content (or deletes created files) on any
+    failure mid-apply.
+  - Path validation: project-relative only, no traversal, no duplicates.
+  - 2 MB per-file size cap.
+
+* Structure Index (`tools/structure_index.py`):
+  - `StructureIndex.rebuild(project_root)` produces a deterministic
+    `Dict[module_name, ModuleInfo]` with classes, functions (fully
+    structured params: name/kind/annotation/default), imports (with
+    try/type-checking/level info), and top-level names.
+  - SHA-256 over sorted `(relpath, content-hash)` pairs — the fingerprint
+    is stable across rebuilds of unchanged source.
+  - Serializes to JSON with `sort_keys=True` for byte-identical output.
+
+* Contract Validator (`tools/contract_validator.py`):
+  - Rebuilds the structure index on every call (per explicit user choice:
+    60ms of CPU is cheaper than one wasted LLM retry).
+  - Checks: syntax errors, unresolved imports from known modules, calls
+    to missing names on imported modules, calls through imported module
+    aliases. Below-threshold checks are warnings, not errors.
+  - Escape hatches: `# vegex: noqa-contract` per line,
+    `# vegex: ignore-dynamic` per file.
+
+* Session ADR (`tools/session_adr.py`):
+  - `.vegex/session_adr.jsonl` — one JSON object per line, `O_APPEND`.
+  - `.vegex/session_adr.compact.json` — regenerated when the raw exceeds
+    400 entries; keeps the last 200 in raw and summarizes all in compact.
+  - `get_recent_summary(limit=5, token_budget=300)` — bounded-context
+    injection using a conservative `4 chars/token` estimator with a 10%
+    safety margin.
+
+* Handshake (`tools/handshake.py`):
+  - `build_session_context(project_root, state, role, token_budget=None)`
+    returns a `SessionContextResult` with `.text`, `.lesson_node_ids`,
+    `.sections_present`, `.estimated_tokens`.
+  - Section budgets: brief 5%, plan 20%, structure 25%, ADR 15%, lessons 35%.
+  - Structure section selects only modules reachable from `target_file` and
+    the plan; renders signatures only, no bodies.
+  - On over-budget: drops sections from the end (highest priority preserved).
+
+* Drift Guard (`tools/drift_guard.py`):
+  - `pin_state(label, path)` / `check_state(label, path)` — canonical JSON
+    hash with `sort_keys=True` (order-independent).
+  - `pin_file(path, label)` / `check_file(path, label)` — raw SHA-256.
+  - Unpinned checks return True (fail-safe).
+
+* Project Structure (`tools/project_structure.py`):
+  - Rewritten to use SHA-256 content hashing instead of mtime+size.
+  - Deterministic tree rendering (sorted dirs, sorted files).
+  - Metadata sidecar moved from `./structure_meta.json` to
+    `.vegex/tree_meta.json` (gitignored).
+  - Atomic writes via temp + `os.replace`.
+
+* Reasoning Logger (`tools/reasoning_logger.py`):
+  - `status/reasoning_log.jsonl` — append-only, per-project.
+  - `status/last_thoughts.md` — overwritten each call (by design).
+
+* Version Control & Changelogs (`tools/backup_manager.py`,
+  `tools/changelog_engine.py`):
+  - `ChangelogEngine(project_root=".", session_id=None)` — logs now written
+    to `<project_root>/iteration_logs/`, not `./iteration_logs`. Removed
+    the class of bug where a VegeX process launched from one directory
+    wrote logs into a different project's tree.
+  - Atomic JSON writes via temp + `os.replace`.
+  - Rotation: keeps the 10 most recent non-empty logs; older logs zip into
+    `archived_logs.zip`.
+
+-------------------------------------------------------------------------------
+5. API & MODEL ROUTING
+-------------------------------------------------------------------------------
+* OpenRouter as primary provider. `cli/model_cli.py` routes all model
+  selection commands; `tools/llm_selector.py` handles the catalog cache.
+* Google AI Studio / Gemini is supported via OpenRouter's compat endpoint
+  (`base_url = "https://openrouter.ai/api/v1"`); OpenRouter proxies Gemini.
+* Direct Gemini SDK path (`/v1beta/openai/`) is available for future
+  BYO-endpoint work but not wired into the default `llm` flow.
+* `safe_chat_completion` iterates a per-role fallback chain on
+  APIConnectionError / APITimeoutError / InternalServerError /
+  RateLimitError. Additional providers can be added by extending
+  `DEFAULT_FALLBACKS` in `tools/llm_selector.py`.
+
+-------------------------------------------------------------------------------
+6. DEPRECATED / REMOVED
+-------------------------------------------------------------------------------
+* `database.py` (LanceDB + `Lesson` dataclass MVP) — REMOVED. Superseded by
+  `memory/` + `tools/lesson_memory_bridge.py`. No remaining imports.
+* `structure_meta.json` — REMOVED (replaced by `.vegex/tree_meta.json`).
+* Legacy `./projects_registry.json` — kept on disk for one-time read; all
+  writes now go to `<framework_root>/.vegex/projects_registry.json`.
+* Class-name aliases `MemoryItem`, `SQLiteStorage`, `rank_memories`,
+  `query_candidates`, `get_by_id`, `add_record` — REMOVED across the
+  codebase; the current API is `MemoryNode`, `SQLiteMemoryStorage`,
+  `rank_memory_nodes`, `MemoryManager.search`, `MemoryManager.get`,
+  `MemoryManager.add`.
+
+-------------------------------------------------------------------------------
+7. KNOWN LIMITATIONS & PENDING WORK
+-------------------------------------------------------------------------------
+* Embedding quality — the bundled `HashEmbeddingProvider` is bag-of-words
+  hashing. Semantic similarity within a topic is limited to surface-
+  vocabulary overlap. On a query like "webgl context loss on unmount",
+  unrelated lessons can land within ±0.02 of a correct one. Swap for a
+  real embedding model by passing `embedding_provider=` to
+  `LessonMemoryBridge(...)`.
+* Python compile check — `run_universal_build` returns success for `.py`
+  files without invoking `py_compile`. Syntax errors must be caught by the
+  reviewer or the contract validator; adding a compile step is pending.
+* Multi-process concurrency — `state.json`, `session_adr.jsonl`, and
+  `iteration_logs/*.json` use atomic writes but no file locks. Two `vegex`
+  processes against the same project will race, last-writer-wins. Only
+  worth fixing if the workflow actually requires concurrent processes.
+* `HashEmbeddingProvider` vectors are cached in the DB, but a change to
+  the embedding provider invalidates every cached vector. There is no
+  migration path yet — delete `.vegex/lessons.db` after swapping providers
+  to force re-indexing.
+* `pyproject.toml` has no `[project.optional-dependencies.embeddings]`
+  entry. Adding `openai` / `voyageai` as optional extras is pending once
+  the embedding provider interface stabilizes.
+
+===============================================================================

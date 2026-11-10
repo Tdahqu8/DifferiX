@@ -1,37 +1,33 @@
-# ==========================================
-# 🔑 СЕКРЕТЫ И ЛОКАЛЬНЫЕ ДАННЫЕ (НЕ ЗАГРУЖАТЬ)
-# ==========================================
-.env
-.env.*
-*.env
-
-# Бэкапы оркестратора и логи итераций
-AI_Orchestrator_Backups/
-iteration_logs/
-
-# ==========================================
-# 🐍 PYTHON & IDE (ВРЕМЕННЫЕ ФАЙЛЫ)
-# ==========================================
+cat > .gitignore << 'EOF'
+# Python
 __pycache__/
-*.py[cod]
-*$py.class
-*.so
-
-# Среды и библиотеки
+*.pyc
+*.pyo
+*.pyd
 .venv/
-env/
 venv/
-ENV/
+env/
+.pytest_cache/
+.mypy_cache/
 
-# Настройки VS Code / PyCharm / Windows
+# DifferiX Runtime
+.env
+.env.rsi
+state.json
+state.json.corrupted_*
+.vegex/
+iteration_logs/
+status/
+memory.db
+memory.db-shm
+memory.db-wal
+models_config.json
+model_tiers.json
+openrouter_models_cache.json
+projects_registry.json
+
+# OS / IDE
+.DS_Store
 .vscode/
 .idea/
-.vs/
-.DS_Store
-Thumbs.db
-tempCodeRunnerFile.py
-
-# Кэши тестов и линтеров
-.pytest_cache/
-.coverage
-htmlcov/
+EOF

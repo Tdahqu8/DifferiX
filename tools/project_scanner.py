@@ -1,69 +1,41 @@
 import os
 import re
+from typing import List, Tuple
 
-def extract_plan_dependencies(plan_data):
+def extract_plan_dependencies(plan_text: str) -> List[str]:
     """
-    Extracts referenced file paths (e.g. 'tools/lesson_manager.py', 'config.py') 
-    from the researcher's analysis or plan dict/list.
+    Извлекает пути к файлам, упомянутым в тексте исследования/плана.
+    Поддерживает пути в форматах Linux/macOS (/) и Windows (\\).
     """
-    if not plan_data:
-        return []
-        
-    text_to_search = str(plan_data)
-    # Match strings looking like relative paths with common code extensions
-    path_pattern = r'[\w\-/]+\.(?:py|json|md|cs|xml|txt)'
-    matches = re.findall(path_pattern, text_to_search)
-    
-    return list(set(matches))
-def get_project_structure(root_dir, allowed_exts=('.py', '.json', '.md', '.cs', '.xml')):
-    """Scans and lists relative file paths in the project."""
-    ignore = {'.git', '.vs', 'bin', 'obj', 'AI_Orchestrator_Backups', 'iteration_logs', 'venv', '__pycache__'}
-    files_list = []
-    for root, dirs, files in os.walk(root_dir):
-        dirs[:] = [d for d in dirs if d not in ignore]
-        for f in files:
-            if f.endswith(allowed_exts):
-                rel = os.path.relpath(os.path.join(root, f), root_dir)
-                files_list.append(rel.replace("\\", "/"))
-    return files_list
+    pattern = r'[\w\-\.\/\\]+\.(?:py|json|md|cs|xml|txt)'
+    matches = re.findall(pattern, plan_text)
+    # Нормализуем разделители и убираем дубликаты
+    normalized = [m.replace('\\', '/') for m in matches]
+    return list(dict.fromkeys(normalized))
 
-def read_file_content(root_dir, rel_path, max_kb=100):
-    """Safely reads a single file from the project root."""
-    full_path = os.path.join(root_dir, rel_path)
-    if not os.path.exists(full_path):
-        return f"--- FILE: {rel_path} (File not found) ---"
-    
-    # Check file size to avoid blowing up context window
-    if os.path.getsize(full_path) > max_kb * 1024:
-        return f"--- FILE: {rel_path} (File exceeds {max_kb}KB size limit) ---"
-        
+def read_file_content(filepath: str, max_lines: int = 150) -> str:
+    """Безопасно читает содержимое файла с ограничением по количеству строк."""
+    if not os.path.exists(filepath):
+        return f"--- FILE: {filepath} (File not found) ---"
     try:
-        with open(full_path, "r", encoding="utf-8", errors="replace") as f:
-            content = f.read()
-        return f"--- FILE: {rel_path} ---\n{content}\n"
+        with open(filepath, 'r', encoding='utf-8', errors='replace') as f:
+            lines = f.readlines()
+            if len(lines) > max_lines:
+                content = "".join(lines[:max_lines]) + f"\n... [TRUNCATED: Total {len(lines)} lines]"
+            else:
+                content = "".join(lines)
+        return f"--- FILE: {filepath} ---\n{content}"
     except Exception as e:
-        return f"--- FILE: {rel_path} (Error reading file: {e}) ---"
+        return f"--- FILE: {filepath} (Error reading: {e}) ---"
 
-def get_full_project_context(root_dir, target_files=None, core_files=("config.py", "tools/lesson_manager.py")):
-    """
-    Returns directory tree AND complete source code for core modules + task dependencies.
-    """
-    all_files = get_project_structure(root_dir)
-    
-    # Build Project Tree View
-    tree_str = "### PROJECT STRUCTURE ###\n" + "\n".join(all_files) + "\n\n"
-    
-    # Determine which files need full content injection
-    files_to_read = set(core_files)
-    if target_files:
-        files_to_read.update(target_files)
-        
-    # Read actual code contents
-    contents_str = "### FILE CONTENTS CONTEXT ###\n\n"
-    for rel_path in files_to_read:
-        # Normalize relative path separators
-        clean_rel = rel_path.replace("\\", "/").strip("/")
-        if clean_rel in all_files or os.path.exists(os.path.join(root_dir, clean_rel)):
-            contents_str += read_file_content(root_dir, clean_rel) + "\n"
-            
-    return tree_str + contents_str
+def get_full_project_context(
+    project_dir: str = ".",
+    core_files: Tuple[str, ...] = ("config.py", "tools/state_manager.py"),
+    max_lines_per_file: int = 150
+) -> str:
+    """Формирует контекст проекта на основе реально существующих базовых модулей."""
+    context_parts = []
+    for file_path in core_files:
+        full_path = os.path.join(project_dir, file_path)
+        context_parts.append(read_file_content(full_path, max_lines=max_lines_per_file))
+    return "\n\n".join(context_parts)

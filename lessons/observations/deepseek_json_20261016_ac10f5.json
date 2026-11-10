@@ -1,0 +1,7 @@
+{
+    "id": "css_var_must_resolve_before_extraction",
+    "root_cause": "The palette extractor read `font-family: var(--ff-label)` literally and quoted `var(--ff-label)` as a font name, producing invalid CSS in the generated palette and a broken font stack in the browser.",
+    "details": {
+        "rule": "When parsing CSS values, resolve var() references against the custom-property table first. If a reference cannot be resolved, skip it rather than emitting it as a value. Never treat an unresolved var() as a concrete token."
+    }
+}

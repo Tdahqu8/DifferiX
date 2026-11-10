@@ -1,0 +1,7 @@
+{
+    "id": "no_todo_placeholders",
+    "root_cause": "Editor using TODO comments instead of writing production code",
+    "details": {
+        "rule": "Do not write // TODO or // Rest of implementation comments. Write complete, functional code blocks without leaving stubbed logic."
+    }
+}

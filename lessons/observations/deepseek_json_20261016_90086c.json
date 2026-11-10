@@ -1,0 +1,7 @@
+{
+    "id": "editor_must_see_sibling_files",
+    "root_cause": "The editor was called once per file with no memory of previous calls. When asked to write CSS, it invented class names that disagreed with the HTML it had written in the prior cycle, producing two files that were each internally valid and jointly incoherent.",
+    "details": {
+        "rule": "When a file's correctness depends on a sibling file (HTML↔CSS↔JS, module↔test, producer↔consumer), the editor must receive the sibling's content as explicit context. Never rely on an LLM remembering anything across separate calls."
+    }
+}

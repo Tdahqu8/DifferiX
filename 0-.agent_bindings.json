@@ -1,0 +1,5 @@
+{
+  "researcher": "anthropic/claude-3.5-sonnet",
+  "editor": "google/gemini-3.8-flash",
+  "reviewer": "anthropic/claude-3.5-haiku"
+}

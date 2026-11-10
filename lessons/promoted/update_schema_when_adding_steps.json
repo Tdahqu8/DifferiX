@@ -1,0 +1,7 @@
+{
+    "id": "update_schema_when_adding_steps",
+    "root_cause": "When adding a new state or step to the orchestrator loop, the agent forgot to update the Pydantic Literal in state_manager.py, causing a ValidationError at runtime.",
+    "details": {
+        "rule": "Whenever adding a new state transition (like 'reflect' or 'pause') to the main loop, you MUST update the Literal type for `current_step` in `ExecutionControl` inside `tools/state_manager.py`."
+    }
+}

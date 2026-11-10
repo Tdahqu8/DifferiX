@@ -1,0 +1,7 @@
+{
+    "id": "prompt_drain_after_interactive_input",
+    "root_cause": "When a user pasted multi-line markdown at an interactive prompt, the first line was consumed as the answer and the remaining lines buffered in stdin. The main REPL then interpreted each line as a separate command, producing a cascade of unknown-command errors.",
+    "details": {
+        "rule": "After every interactive prompt, drain stdin non-blockingly. In the main REPL loop, silently discard lines that match paste-artifact prefixes (leading #, -, >, |, backtick fences, or indentation) before attempting command dispatch."
+    }
+}

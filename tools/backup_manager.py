@@ -3,7 +3,6 @@ import os
 from datetime import datetime
 from pathlib import Path
 
-# --- CONFIG ---
 REPO_PATH = '.'
 IGNORE_PATTERNS = [
     '.env',
@@ -12,14 +11,17 @@ IGNORE_PATTERNS = [
     '*.tmp',
 ]
 
-def get_repo():
-    """Repo initialisation..."""
+def get_repo(path_or_repo=None):
+    """Repo initialisation with path safety check."""
+    target = path_or_repo or REPO_PATH
+    if isinstance(target, git.Repo):
+        return target
     try:
-        return git.Repo(REPO_PATH)
+        return git.Repo(target)
     except git.exc.InvalidGitRepositoryError:
-        print("Error: current folder is not a git repo")
-        print("Write 'git init' in terminal. Ensure that you located to that project's folder with cd .. and cd 'yourProjectName' ")
-        exit(1)
+        print(f"Error: path '{target}' is not a valid git repository.")
+        print("Run 'git init' inside target project folder.")
+        return None
 
 def should_ignore(file_path):
     """Checking whether file is ignored"""
@@ -36,8 +38,11 @@ def should_ignore(file_path):
                 return True
     return False
 
-def make_auto_commit(repo, agent_name="system", comment=""):
+def make_auto_commit(repo_or_path, agent_name="system", comment=""):
     """Creating commits with file filtration and error processing:"""
+    repo = get_repo(repo_or_path)
+    if not repo:
+        return
     try:
         changed_files = [item.a_path for item in repo.index.diff(None)]
         untracked_files = repo.untracked_files
@@ -62,7 +67,7 @@ def make_auto_commit(repo, agent_name="system", comment=""):
 
         try:
             commit = repo.index.commit(message)
-            print(f"Commit created: {message} (Хеш: {commit.hexsha[:7]})")
+            print(f"Commit created: {message} (SHA: {commit.hexsha[:7]})")
         except git.exc.GitCommandError as e:
             print(f"Commit error: {e}")
             return
@@ -70,44 +75,48 @@ def make_auto_commit(repo, agent_name="system", comment=""):
     except Exception as e:
         print(f"Fatal error while auto-saving: {e}")
 
-def safe_rollback(repo, target_hash):
-    """
-    Safe rollback: created a new branch identical to old one without deleting anything
-    """
+def safe_rollback(repo_or_path, target_hash):
+    """Safe rollback to target commit."""
+    repo = get_repo(repo_or_path)
+    if not repo:
+        return
     branch_name = f"rollback-to-{target_hash[:7]}"
     try:
         commit = repo.commit(target_hash)
-        
         new_branch = repo.create_head(branch_name, commit)
-        
         repo.heads[branch_name].checkout()
-        
         print(f"Rollbacked successfully: '{branch_name}'.")
-        print(f"   Old files restored. Check it in 'main' or previous")
-        print(f"   Write that command to return: git checkout main")
     except git.exc.GitError as e:
         print(f"Git error occurred: {e}")
 
-def show_all_commits(repo, limit=None):
-    """Show all tokens"""
-    commits = list(repo.iter_commits())
-    if limit is not None:
-        commits = commits[:limit]
+def show_all_commits(repo_or_path, limit=15):
+    """Display git commit list."""
+    repo = get_repo(repo_or_path)
+    if not repo:
+        return []
+    try:
+        commits = list(repo.iter_commits())
+        if limit is not None:
+            commits = commits[:limit]
 
-    print(f"\n--- Git commits ({len(commits)}) ---")
-    for i, c in enumerate(commits):
-        short = c.hexsha[:7]
-        msg = c.message.strip().split('\n')[0][:70]
-        date = c.committed_datetime.strftime("%Y-%m-%d %H:%M")
-        print(f"{i:3}. {short} | {date} | {msg}")
-    return commits
+        print(f"\n--- Git Commits ({len(commits)}) ---")
+        for i, c in enumerate(commits):
+            short = c.hexsha[:7]
+            msg = c.message.strip().split('\n')[0][:70]
+            date = c.committed_datetime.strftime("%Y-%m-%d %H:%M")
+            print(f"{i:3}. {short} | {date} | {msg}")
+        return commits
+    except Exception as e:
+        print(f"Error reading commits: {e}")
+        return []
 
-
-def create_success_tag(repo):
-    """Создать тег только на успешном завершении"""
+def create_success_tag(repo_or_path):
+    repo = get_repo(repo_or_path)
+    if not repo:
+        return
     try:
         tag_name = f"success-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
         repo.create_tag(tag_name)
-        print(f"Failed to create success tag: {tag_name}")
+        print(f"Created success tag: {tag_name}")
     except Exception as e:
         print(f"Cannot create tag: {e}")

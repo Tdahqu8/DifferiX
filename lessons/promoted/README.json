@@ -1,0 +1,77 @@
+{
+    "title": "Lesson compression and status rules",
+    "researcher_instruction": {
+        "compression_format": {
+        "template": "IF A THEN don't do B, because C",
+        "requirements": [
+            "Rewrite every observation into one short rule.",
+            "One rule equals one failure pattern.",
+            "Prefer runtime or bug prevention over style advice.",
+            "Use approximately 20 words when possible, never more than 35.",
+            "Keep concrete project terms such as ResearchPerformed, DefDatabase, and null-check.",
+            "Remove fluff, duplicates, and weak wording such as should, consider, and try to.",
+            "Add tags for language, domain, and topic."
+        ],
+        "examples": {
+            "bad": "It is better to validate defs and handle errors properly for maintainability.",
+            "good": "IF calling DefDatabase.GetDef<T>() THEN don't skip null-check, because missing defs crash later.",
+            "bad_2": "Use proper research APIs instead of unsafe field access.",
+            "good_2": "IF updating research progress THEN don't write _progress directly, because ResearchPerformed() keeps state valid."
+        }
+        },
+        "status_meanings": {
+        "observation": "Raw lesson from a real failure or review; unconfirmed.",
+        "candidate": "Researcher recommends this rule for wider use; still not human-verified.",
+        "promoted": "Only human-verified rules that are operator-approved. The researcher must never auto-promote.",
+        "deprecated": "Outdated, wrong, duplicated, or harmful rule."
+        },
+        "raise_observation_to_candidate": {
+        "conditions": [
+            "Prevents a real runtime, build, or logic failure.",
+            "Reappeared or is likely to reappear.",
+            "Rule is specific and testable.",
+            "Rule is not a duplicate of an existing candidate or promoted lesson.",
+            "A clear IF/THEN/BECAUSE form is possible."
+        ],
+        "do_not_raise_when": [
+            "It is only style, formatting, or preference.",
+            "Evidence is weak or based on one-off noise.",
+            "It conflicts with a promoted lesson.",
+            "It is too broad to apply reliably."
+        ]
+        },
+        "lower_to_deprecated": [
+        "A better replacement rule exists.",
+        "The rule is false, unsafe, or outdated for current APIs.",
+        "It duplicates another stronger lesson.",
+        "It caused repeated bad guidance."
+        ],
+        "researcher_permissions": {
+        "allowed": [
+            "Create observations.",
+            "Compress or rewrite rules.",
+            "Suggest observation-to-candidate promotion.",
+            "Suggest candidate or promoted lessons for deprecation with a reason.",
+            "Merge near-duplicates into one stronger candidate suggestion."
+        ],
+        "forbidden": [
+            "Automatically set status to promoted.",
+            "Invent lessons without evidence from current tasks, logs, or reviews.",
+            "Bulk-promote style advice."
+        ]
+        },
+        "output_per_lesson": {
+        "required_fields": {
+            "id": "string",
+            "status": [
+            "observation",
+            "candidate",
+            "deprecated"
+            ],
+            "rule": "IF A THEN don't do B, because C",
+            "tags": [],
+            "reason_for_status": "One short sentence."
+        }
+        }
+    }
+}

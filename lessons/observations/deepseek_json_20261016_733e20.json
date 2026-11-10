@@ -1,0 +1,7 @@
+{
+    "id": "drift_pin_after_internal_write",
+    "root_cause": "External-mutation detection pinned the target file's content-hash before the same step's internal write to that file. Every subsequent check compared against stale content and reported a false drift on every cycle.",
+    "details": {
+        "rule": "Pin the content-hash immediately after any internal write to the tracked file, never before it. A pin that straddles a write boundary will always false-positive. If a step both reads and writes the file, pin once at the end of the write, not at the start of the read."
+    }
+}
