@@ -1,7 +1,7 @@
 {
   "bindings": {
-    "researcher": "z-ai/glm-5.3-flashx",
-    "editor": "deepseek/deepseek-v4.1-flash",
+    "researcher": "google/gemini-3.8-flash",
+    "editor": "xiaomi/mimo-v2.6-pro",
     "reviewer": "xiaomi/mimo-v2.6-pro"
   },
   "dynamic_routing": true

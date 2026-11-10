@@ -237,6 +237,13 @@ def run_researcher(
     "If the task is to build a website, you MUST append TWO final steps to the plan:\n"
     "   - Step N: 'Add CSS media queries for responsiveness and micro-interaction transitions (hover states, focus rings)' targeting 'styles.css'.\n"
     "   - Step N+1: 'Add JavaScript for custom cursor tracking, IntersectionObserver scroll-reveals, and dynamic element interactions' targeting 'script.js'.\n\n"
+        "### GEO & AI-SEO RULE\n"
+    "If the task is to build a website, you MUST also append these steps to the plan:\n"
+    "   - Step N: 'Generate llms.txt in the project root with site summary and key links' targeting 'llms.txt'.\n"
+    "   - Step N+1: 'Inject JSON-LD Schema.org (WebSite or Organization) into the <head> of index.html' targeting 'index.html'.\n\n"
+    "### PERFORMANCE OPTIMIZATION RULE\n"
+    "If the task is to build a website, you MUST append a FINAL step to the plan:\n"
+    "   - Step N+2: 'Optimize performance: add defer to scripts, loading=\"lazy\" to images, font-display=swap to fonts, and ensure CSS animations use GPU transforms' targeting 'index.html' (and 'styles.css').\n\n"
     "### OUTPUT FORMAT\n"
     "Respond with ONLY a valid JSON object. Keys MUST be in this exact order:\n"
     "{\n"
@@ -253,8 +260,12 @@ def run_researcher(
     '      "status": "pending"\n'
     "    }\n"
     "  ]\n"
+        "7. MANDATORY FULL-STACK RULE: If the task is to build a website, your plan MUST include separate steps for: "
+    "index.html, styles.css, script.js, llms.txt (GEO), and a final performance optimization pass. "
+    "Never finish a plan until all these files are created or updated.\n\n"
     "}"
     )
+    
 
     user_input_parts = []
     if session_context:

@@ -1,16 +1,16 @@
 id: webdev-pro
 name: WebDev Pro
 author: tdahq8
-version: 2.1.0
-description: "Advanced web generation with dynamic style injection."
+version: 2.2.0
+description: "Advanced web generation with dynamic style injection and GEO optimization."
 skills:
   - base_rules
   - web_design
+  - web_geo
+  - web_performance
   - styles/style_3d_webgl
   - styles/style_clean_saas
   - styles/style_brutalist
   - styles/style_cyberpunk
   - styles/style_editorial
-lessons:
-  - css_truncation
-  - class_divergence
+  - styles/style_polish

@@ -81,3 +81,5 @@ Note: Executable code is strictly forbidden inside plugins to prevent RCE. Plugi
 📜 License
 
 MIT License. Build, fork, and create.
+
+differix plugin install https://raw.githubusercontent.com/tdahq8/differix/main/dist/webdev_pro.differixplugin

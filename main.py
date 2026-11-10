@@ -1664,6 +1664,35 @@ class OrchestratorConsole:
                     if isinstance(s, dict) and s.get("status") == "pending"
                 ]
                 if not pending_steps:
+                    # SAFETY CHECK: Did the agent actually finish a web task?
+                    is_web_task = (
+                        os.path.exists(os.path.join(self.proj["path"], "index.html")) or 
+                        "index.html" in str(state.get("pipeline_created_files", []))
+                    )
+                    
+                    if is_web_task:
+                        missing_files = []
+                        if not os.path.exists(os.path.join(self.proj["path"], "styles.css")):
+                            missing_files.append("styles.css")
+                        if not os.path.exists(os.path.join(self.proj["path"], "script.js")):
+                            missing_files.append("script.js")
+                        if not os.path.exists(os.path.join(self.proj["path"], "llms.txt")):
+                            missing_files.append("llms.txt")
+                            
+                        if missing_files:
+                            console.print(
+                                f"[bold yellow]WARNING: Plan complete, but web files are missing: "
+                                f"{', '.join(missing_files)}. Forcing Research phase to generate them.[/bold yellow]"
+                            )
+                            state["editor_feedback"] = (
+                                f"CRITICAL: You marked the plan as complete, but the following mandatory "
+                                f"web files are missing: {', '.join(missing_files)}. "
+                                f"You must create a new plan to generate these files."
+                            )
+                            state["current_step"] = "research"
+                            self.save_state(state)
+                            continue
+
                     console.print(
                         "[green]No pending steps remaining. Task is complete.[/green]"
                     )
