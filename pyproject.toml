@@ -3,13 +3,25 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "vegex"
-version = "0.4.0"
-description = "VegeX Multi-Agent AI Development & Quality Assurance Environment"
+name = "differix"
+version = "0.1.0-alpha.1"
+description = "The Deterministic, Local-First OS for Autonomous AI Agents."
+readme = "README.md"
 requires-python = ">=3.10"
-license = "MIT"
+license = { text = "MIT" }
 authors = [
-    { name = "tdahq8" }
+    { name = "Tdahqu8" }
+]
+keywords = ["ai", "llm", "agents", "multi-agent", "openai", "claude", "autonomous", "developer-tools"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Code Generators",
 ]
 dependencies = [
     "python-dotenv>=1.0.0",
@@ -25,15 +37,19 @@ dependencies = [
 dev = [
     "pytest>=8.0.0",
 ]
-embeddings = [
-    "fastembed>=0.3.0",
-]
-yaml = [
+full = [
+    "fastembed>=0.3.0", 
     "PyYAML>=6.0",
+    "playwright>=1.40.0"
 ]
 
+[project.urls]
+"Homepage" = "https://differix.dev"
+"Bug Tracker" = "https://github.com/Tdahqu8/DifferiX/issues"
+"Source Code" = "https://github.com/Tdahqu8/DifferiX"
+
 [project.scripts]
-vegex = "main:run_cli"
+differix = "main:run_cli"
 
 # --- Explicit package discovery (fixes flat-layout auto-discovery error) ---
 [tool.setuptools]

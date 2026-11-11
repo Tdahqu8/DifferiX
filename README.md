@@ -10,7 +10,10 @@
 </div>
 
 ---
-<img width="2048" height="2048" alt="diffex" src="https://github.com/user-attachments/assets/9df474fa-9821-47e7-a6c1-dc6621364bd9" />
+[![PyPI version](https://img.shields.io/pypi/v/differix?color=blue&style=flat-square)](https://pypi.org/project/differix/)
+[![PyPI downloads](https://img.shields.io/pypi/dm/differix?color=green&style=flat-square)](https://pypi.org/project/differix/)
+[![Python versions](https://img.shields.io/pypi/pyversions/differix?style=flat-square)](https://pypi.org/project/differix/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](https://opensource.org/licenses/MIT)
 DifferiX is an open, model-agnostic multi-agent runtime. It doesn't just let LLMs write code; it forces them to write **verified, executable code** inside a deterministic Python shell.
 
 Most "autonomous agents" fail because they hallucinate success and loop endlessly. DifferiX solves this with **Zero Trust Architecture**, **Tiered Context Assembly**, and a **Local Experience Engine**.
@@ -30,27 +33,24 @@ Most "autonomous agents" fail because they hallucinate success and loop endlessl
 *   **Dynamic Skill Injection:** The Researcher analyzes the task and injects *only* the relevant skills (e.g., `style_brutalist` or `style_3d_webgl`).
 *   **Recursive Self-Improvement (RSI):** The framework can safely modify its own source code, protected by a critical-file gate.
 *   **Model Agnostic:** Works with OpenRouter, Anthropic, Google, or local Ollama models.
-
 ## 🚀 Quick Start
 
-```bash
-# Clone the repository
-git clone https://github.com/Tdahqu8/DifferiX.git
-cd DifferiX
+Install DifferiX via PyPI (recommended):
 
-# Setup environment
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
+    pip install differix
 
-# Add your API key
-cp .env.example .env
-# Edit .env and add OPENROUTER_API_KEY=sk-or-v1-...
+    # Add your API key
+    cp .env.example .env
+    # Edit .env and add OPENROUTER_API_KEY=sk-or-v1-...
 
-# Run DifferiX
-export VEGEX_RSI_MODE=1
-python main.py
-```
+    # Run DifferiX
+    differix
+
+For developers wanting the latest source:
+
+    git clone https://github.com/Tdahqu8/DifferiX.git
+    cd DifferiX
+    pip install -e .
 
 ## 🎨 Showcase (WebDev Pro Plugin)
 <img width="1919" height="1055" alt="rawkid" src="https://github.com/user-attachments/assets/ff5d2d20-95c8-46e4-978b-7fac7457ea8f" />

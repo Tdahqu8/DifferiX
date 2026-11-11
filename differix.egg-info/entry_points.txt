@@ -1,0 +1,2 @@
+[console_scripts]
+differix = main:run_cli
