@@ -1,5 +1,5 @@
 {
-    "id": "в",
+    "id": "The palette extractor derived muted and dim text colors",
     "root_cause": "The palette extractor derived muted and dim text colors by subtracting a fixed amount from the main text's lightness. When the base was #000000 (lightness 0), subtraction clamped to zero and all three text tokens collapsed to the same value.",
     "details": {
         "rule": "Color derivation from a base must blend toward a target (the background or foreground) rather than shift an absolute channel. Blending is monotonic and never collapses at the extremes. Never call adjust_lightness on a color that may already sit at 0 or 1."

@@ -1,11 +1,12 @@
+```markdown
 <div align="center">
   <h1>DifferiX</h1>
   <p><strong>The Deterministic, Local-First OS for Autonomous AI Agents.</strong></p>
   <p>
-    <a href="#features">Features</a> •
-    <a href="#quick-start">Quick Start</a> •
-    <a href="#architecture">Architecture</a> •
-    <a href="#plugins">Plugins</a>
+    <a href="#-features">Features</a> •
+    <a href="#-quick-start">Quick Start</a> •
+    <a href="#-architecture">Architecture</a> •
+    <a href="#-plugins">Plugins</a>
   </p>
 </div>
 
@@ -35,8 +36,8 @@ Most "autonomous agents" fail because they hallucinate success and loop endlessl
 
 ```bash
 # Clone the repository
-git clone https://github.com/tdahq8/differix.git
-cd differix
+git clone https://github.com/Tdahqu8/DifferiX.git
+cd DifferiX
 
 # Setup environment
 python3 -m venv venv
@@ -50,18 +51,17 @@ cp .env.example .env
 # Run DifferiX
 export VEGEX_RSI_MODE=1
 python main.py
+```
 
-🎨 Showcase (WebDev Pro Plugin)
+## 🎨 Showcase (WebDev Pro Plugin)
 
 DifferiX dynamically injects design skills to generate production-ready UIs.
 
-(Add the screenshot of the brutalist Web3 site here)
+> *"Create a portfolio landing page for a Web3 graffiti artist. Make it look raw and bold."* — Generated in 4 cycles using the `style_brutalist` skill.
 
-    "Create a portfolio landing page for a Web3 graffiti artist. Make it look raw and bold." — Generated in 4 cycles using the style_brutalist skill.
+## 🏗️ Architecture
 
-🏗️ Architecture
-text
-
+```text
 [ User ] <--> [ LLM Interpreter ]
                      |
       +--------------+--------------+
@@ -72,14 +72,19 @@ text
       +--------------+--------------+
                      |
              [ Verified Code ]
+```
 
-🔌 Ecosystem & Plugins
+## 🔌 Ecosystem & Plugins
 
-DifferiX supports .differixplugin files. Install plugins to give agents new superpowers (WebDev, EdTech, Crypto Auditing).
+DifferiX supports `.differixplugin` files. Install plugins to give agents new superpowers (WebDev, EdTech, Crypto Auditing).
 
-Note: Executable code is strictly forbidden inside plugins to prevent RCE. Plugins are data-only (.md, .json, .css).
-📜 License
+> **Note:** Executable code is strictly forbidden inside plugins to prevent RCE. Plugins are data-only (`.md`, `.json`, `.css`).
+
+```bash
+# Install the official WebDev Pro plugin
+differix plugin install https://github.com/Tdahqu8/DifferiX/releases/download/v0.1.0-alpha/webdev_pro.differixplugin
+```
+
+## 📜 License
 
 MIT License. Build, fork, and create.
-
-differix plugin install https://raw.githubusercontent.com/tdahq8/differix/main/dist/webdev_pro.differixplugin
