@@ -10,7 +10,7 @@
 </div>
 
 ---
-
+<img width="2048" height="2048" alt="diffex" src="https://github.com/user-attachments/assets/9df474fa-9821-47e7-a6c1-dc6621364bd9" />
 DifferiX is an open, model-agnostic multi-agent runtime. It doesn't just let LLMs write code; it forces them to write **verified, executable code** inside a deterministic Python shell.
 
 Most "autonomous agents" fail because they hallucinate success and loop endlessly. DifferiX solves this with **Zero Trust Architecture**, **Tiered Context Assembly**, and a **Local Experience Engine**.
@@ -53,6 +53,7 @@ python main.py
 ```
 
 ## 🎨 Showcase (WebDev Pro Plugin)
+<img width="1919" height="1055" alt="rawkid" src="https://github.com/user-attachments/assets/ff5d2d20-95c8-46e4-978b-7fac7457ea8f" />
 
 DifferiX dynamically injects design skills to generate production-ready UIs.
 
