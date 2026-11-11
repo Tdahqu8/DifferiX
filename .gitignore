@@ -30,4 +30,5 @@ projects_registry.json
 .DS_Store
 .vscode/
 .idea/
-EOF
+EOF*.egg-info/
+dist/
