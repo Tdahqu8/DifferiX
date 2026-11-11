@@ -1,7 +1,7 @@
 """
 tools/visual_diff.py
 --------------------
-Visual regression diffing pipeline for the VegeX web-dev plugin.
+Visual regression diffing pipeline for the Differix web-dev plugin.
 
 Given a reference screenshot and a freshly captured screenshot, this
 module computes a structural-similarity (SSIM) score, locates the

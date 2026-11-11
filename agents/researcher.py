@@ -34,7 +34,7 @@ def get_project_file_tree(project_dir: str = ".") -> str:
     base_path = os.path.abspath(project_dir)
     ignored_dirs = {
         ".git", "__pycache__", ".venv", "venv",
-        "node_modules", ".idea", ".vscode", ".vegex",
+        "node_modules", ".idea", ".vscode", ".differix",
     }
 
     for root, dirs, files in os.walk(base_path):

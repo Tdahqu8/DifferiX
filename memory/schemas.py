@@ -1,5 +1,5 @@
 """
-Data types, enums, and exceptions for the VegeX memory subsystem.
+Data types, enums, and exceptions for the DifferiX memory subsystem.
 """
 
 from __future__ import annotations

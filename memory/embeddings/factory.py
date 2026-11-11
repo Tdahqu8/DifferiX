@@ -24,7 +24,7 @@ from memory.embeddings.providers import (
 
 logger = logging.getLogger(__name__)
 
-_PROBE_STRING = "vegex embedding probe"
+_PROBE_STRING = "differix embedding probe"
 
 
 def _probe(provider: BaseEmbeddingProvider) -> bool:

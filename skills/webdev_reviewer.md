@@ -3,7 +3,7 @@ id: webdev_reviewer
 role: reviewer
 name: Base Reviewer Permissions & Rules
 ---
-# VegeX WebDev Reviewer Skill
+# Differix WebDev Reviewer Skill
 
 Web projects require a different review posture than single-file tasks.
 A file can be internally valid and still break the project because it

@@ -1,5 +1,5 @@
 """
-VegeX orchestrator entry point.
+DifferiX orchestrator entry point.
 
 State machine: research → edit → review → (research | done).
 
@@ -101,9 +101,9 @@ load_dotenv()
 # Framework paths
 # ---------------------------------------------------------------------------
 _FRAMEWORK_ROOT = os.path.abspath(os.path.dirname(__file__))
-_VEGEX_DIR = os.path.join(_FRAMEWORK_ROOT, ".vegex")
+_DIFFERIX_DIR = os.path.join(_FRAMEWORK_ROOT, ".differix")
 
-REGISTRY_FILE = os.path.join(_VEGEX_DIR, "projects_registry.json")
+REGISTRY_FILE = os.path.join(_DIFFERIX_DIR, "projects_registry.json")
 LEGACY_REGISTRY_FILE = os.path.join(os.getcwd(), "projects_registry.json")
 
 
@@ -274,7 +274,7 @@ def validate_required_state_fields(state: dict) -> tuple:
 # Orchestrator
 # ---------------------------------------------------------------------------
 class OrchestratorConsole:
-    VEGEX_FRAMEWORK_ROOT = _FRAMEWORK_ROOT
+    DIFFERIX_FRAMEWORK_ROOT = _FRAMEWORK_ROOT
 
     def __init__(self):
         self.total_cost = 0.0
@@ -311,7 +311,7 @@ class OrchestratorConsole:
         target_dir = project_dir or (self.proj["path"] if self.proj else None)
         if target_dir and os.path.isdir(target_dir):
             return os.path.join(target_dir, "state.json")
-        return os.path.join(self.VEGEX_FRAMEWORK_ROOT, "state.json")
+        return os.path.join(self.DIFFERIX_FRAMEWORK_ROOT, "state.json")
 
     def load_state(self, project_dir: str = None) -> dict:
         state_file = self.get_state_path(project_dir)
@@ -644,7 +644,7 @@ class OrchestratorConsole:
         log_dir = (
             os.path.join(self.proj["path"], "iteration_logs")
             if self.proj
-            else os.path.join(self.VEGEX_FRAMEWORK_ROOT, "iteration_logs")
+            else os.path.join(self.DIFFERIX_FRAMEWORK_ROOT, "iteration_logs")
         )
         if not os.path.exists(log_dir):
             console.print("[yellow]No changelogs recorded yet.[/yellow]")
@@ -2060,7 +2060,7 @@ class OrchestratorConsole:
                 is_critical = res_file in getattr(config, "RSI_CRITICAL_FILES", set())
                 
                 if is_rsi and is_critical:
-                    pending_dir = os.path.join(self.proj["path"], ".vegex", "pending_critical_changes")
+                    pending_dir = os.path.join(self.proj["path"], ".differix", "pending_critical_changes")
                     os.makedirs(pending_dir, exist_ok=True)
                     safe_filename = res_file.replace("/", "_").replace("\\", "_")
                     pending_file = os.path.join(pending_dir, f"{safe_filename}_{int(time.time())}.patch")
@@ -2142,7 +2142,7 @@ class OrchestratorConsole:
                     f"in {apply_report.elapsed_ms:.1f}ms[/green]"
                 )
 
-                is_framework_root = os.path.abspath(self.proj["path"]) == os.path.abspath(self.VEGEX_FRAMEWORK_ROOT)
+                is_framework_root = os.path.abspath(self.proj["path"]) == os.path.abspath(self.DIFFERIX_FRAMEWORK_ROOT)
                 if config.RSI_MODE and is_framework_root:
                     missing = self._check_critical_files_intact()
                     if missing:
@@ -2295,7 +2295,7 @@ class OrchestratorConsole:
                                 vis_res = visual_review_page(
                                     html_path=target_abs,
                                     reference_png=ref_path,
-                                    output_dir=os.path.join(self.proj["path"], ".vegex", "diffs")
+                                    output_dir=os.path.join(self.proj["path"], ".differix", "diffs")
                                 )
                                 if vis_res and not vis_res.get("ok", True):
                                     visual_ctx = vis_res.get("feedback", "")
@@ -2594,7 +2594,7 @@ class OrchestratorConsole:
         console.clear()
         console.print(
             Panel(
-                "[bold cyan]VegeX Autonomous Multi-Agent Orchestrator[/bold cyan]\n"
+                "[bold cyan]DIfferiX Autonomous Multi-Agent Orchestrator[/bold cyan]\n"
                 "[dim]Interactive Terminal Interface[/dim]",
                 border_style="cyan",
                 expand=False,
@@ -2606,7 +2606,7 @@ class OrchestratorConsole:
                 f"[bold green]Active Workspace:[/bold green] {self.proj['name']} "
                 f"([cyan]{self.proj['path']}[/cyan])\n"
             )
-            console.print(f"[dim]Framework root: {self.VEGEX_FRAMEWORK_ROOT}[/dim]")
+            console.print(f"[dim]Framework root: {self.DIFFERIX_FRAMEWORK_ROOT}[/dim]")
             console.print(f"[dim]Registry: {REGISTRY_FILE}[/dim]\n")
         else:
             console.print(
@@ -2616,7 +2616,7 @@ class OrchestratorConsole:
 
         while True:
             try:
-                cmd_line = console.input("[bold cyan]VegeX > [/bold cyan]").strip()
+                cmd_line = console.input("[bold cyan]DifferiX > [/bold cyan]").strip()
 
                 if _looks_like_paste_artifact(cmd_line):
                     continue
@@ -2725,7 +2725,7 @@ class OrchestratorConsole:
                     auto_update_tiers()
 
                 elif head in ("exit", "quit"):
-                    console.print("[bold yellow]Exiting VegeX...[/bold yellow]")
+                    console.print("[bold yellow]Exiting DifferiX...[/bold yellow]")
                     sys.exit(0)
 
                 else:
@@ -2735,7 +2735,7 @@ class OrchestratorConsole:
                     )
 
             except (KeyboardInterrupt, EOFError):
-                console.print("\nExiting VegeX...")
+                console.print("\nExiting DifferiX...")
                 break
 
 

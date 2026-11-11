@@ -11,8 +11,8 @@ Design principles:
   1. Fail-open on internal error. A bug in the validator must never block
      legitimate work; the sandbox is still the authority.
   2. Confidence-scored checks. Anything below 0.9 is a warning, not an error.
-  3. Escape hatch: `# vegex: noqa-contract` on a line disables checks for
-     that line. `# vegex: ignore-dynamic` at module top disables the
+  3. Escape hatch: `# differix: noqa-contract` on a line disables checks for
+     that line. `# differix: ignore-dynamic` at module top disables the
      dynamic-dispatch heuristics entirely.
   4. Fresh index, per Option-1 override — validator builds its own
      StructureIndex.rebuild() internally so there's no staleness window.
@@ -296,23 +296,23 @@ class ContractValidator:
 # Helpers
 # ---------------------------------------------------------------------------
 def _module_has_dynamic_opt_out(content: str) -> bool:
-    """Check first 3 lines for `# vegex: ignore-dynamic`."""
+    """Check first 3 lines for `# differix: ignore-dynamic`."""
     for i, line in enumerate(content.splitlines()):
         if i > 3:
             break
-        if "vegex: ignore-dynamic" in line:
+        if "differix: ignore-dynamic" in line:
             return True
     return False
 
 
 def _has_noqa(node: ast.AST, content: str) -> bool:
-    """Check whether the node's source line contains `# vegex: noqa-contract`."""
+    """Check whether the node's source line contains `# differix: noqa-contract`."""
     lineno = getattr(node, "lineno", None)
     if lineno is None:
         return False
     lines = content.splitlines()
     if 1 <= lineno <= len(lines):
-        return "vegex: noqa-contract" in lines[lineno - 1]
+        return "differix: noqa-contract" in lines[lineno - 1]
     return False
 
 

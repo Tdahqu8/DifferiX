@@ -440,14 +440,14 @@ HITL_EVERY_N_CYCLES = 3
 PLAN_CHUNK_THRESHOLD = 100
 
 # ============================================================================
-# Lesson Memory Bridge (VegeX memory subsystem)
+# Lesson Memory Bridge
 # ============================================================================
 # The bridge syncs JSON lesson files into a SQLite A-Score index at runtime.
 # JSON remains the source of truth for content; SQLite holds ranking signals.
 
-LESSONS_MEMORY_ENABLED = os.getenv("VEGEX_LESSONS_MEMORY", "1") == "1"
+LESSONS_MEMORY_ENABLED = os.getenv("DIFFERIX_LESSONS_MEMORY", "1") == "1"
 LESSONS_ROOT = os.path.join(WORKSPACE_DIR, "lessons")
-LESSONS_MEMORY_DIR = os.path.join(WORKSPACE_DIR, ".vegex")
+LESSONS_MEMORY_DIR = os.path.join(WORKSPACE_DIR, ".differix")
 LESSONS_MEMORY_DB_PATH = os.path.join(LESSONS_MEMORY_DIR, "lessons.db")
 def _safe_int_env(name: str, default: int, minimum: int, maximum: int) -> int:
     """Parse an integer env var with bounds; falls back to default on abuse."""
@@ -461,7 +461,7 @@ def _safe_int_env(name: str, default: int, minimum: int, maximum: int) -> int:
     return val
 
 
-LESSONS_EMBEDDING_DIM = _safe_int_env("VEGEX_LESSON_EMBED_DIM", 256, 1, 4096)
+LESSONS_EMBEDDING_DIM = _safe_int_env("DIFFERIX_LESSON_EMBED_DIM", 256, 1, 4096)
 
 # Retrieval defaults
 LESSONS_RETRIEVAL_LIMIT = 5
@@ -476,34 +476,34 @@ LESSONS_RANKING_EPSILON = 1e-5
 
 # RSI mode: active project is DifferiX itself. Enables diff-based
 # security scanning instead of full-content scanning.
-RSI_MODE = os.getenv("VEGEX_RSI_MODE", "0") == "1"
+RSI_MODE = os.getenv("DIFFERIX_RSI_MODE", "0") == "1"
 
 # ============================================================================
-# Embedding provider (VegeX memory subsystem)
+# Embedding provider (DIfferiX memory subsystem)
 # ============================================================================
 # Provider selection: "auto" | "openrouter" | "local" | "hash"
 #   auto       → OpenRouter if OPENROUTER_API_KEY is set, else local, else hash
 #   openrouter → require OPENROUTER_API_KEY (same key as chat completions)
 #   local      → require fastembed installed (offline)
 #   hash       → zero-dependency bag-of-words (low quality; emergency only)
-EMBEDDING_PROVIDER = os.getenv("VEGEX_EMBEDDING_PROVIDER", "auto")
-EMBEDDING_PREFER_LOCAL = os.getenv("VEGEX_EMBEDDING_PREFER_LOCAL", "0") == "1"
+EMBEDDING_PROVIDER = os.getenv("DIFFERIX_EMBEDDING_PROVIDER", "auto")
+EMBEDDING_PREFER_LOCAL = os.getenv("DIFFERIX_EMBEDDING_PREFER_LOCAL", "0") == "1"
 
 # Target vector dimension. text-embedding-3-small supports the `dimensions`
 # parameter (truncation); 512 balances quality and storage. Local MiniLM
 # is fixed at 384 and ignores this.
-EMBEDDING_DIM = _safe_int_env("VEGEX_EMBEDDING_DIM", 512, 1, 4096)
+EMBEDDING_DIM = _safe_int_env("DIFFERIX_EMBEDDING_DIM", 512, 1, 4096)
 
 # OpenRouter embedding model ID (provider-prefixed).
 OPENROUTER_EMBEDDING_MODEL = os.getenv(
-    "VEGEX_OPENROUTER_EMBED_MODEL", "openai/text-embedding-3-small"
+    "DIFFERIX_OPENROUTER_EMBED_MODEL", "openai/text-embedding-3-small"
 )
 
 # ---------------------------------------------------------------------------
 # Reflection — periodic self-analysis of recent failures
 # ---------------------------------------------------------------------------
-REFLECTION_INTERVAL = _safe_int_env("VEGEX_REFLECTION_INTERVAL", 5, 1, 1000)
-REFLECTION_MODEL = os.getenv("VEGEX_REFLECTION_MODEL", "")  # empty → top-tier
+REFLECTION_INTERVAL = _safe_int_env("DIFFERIX_REFLECTION_INTERVAL", 5, 1, 1000)
+REFLECTION_MODEL = os.getenv("DIFFERIX_REFLECTION_MODEL", "")  # empty → top-tier
 if REFLECTION_MODEL and not _is_valid_model_id(REFLECTION_MODEL):
     REFLECTION_MODEL = ""
 REFLECTION_MAX_OBSERVATIONS = 3
@@ -523,11 +523,11 @@ REFLECTION_MIN_OCCURRENCES = 2
 #
 # Setting a budget to a huge value effectively disables TCA truncation for
 # that role (all content is included as-is).
-TCA_ENABLED = os.getenv("VEGEX_TCA_ENABLED", "1") == "1"
+TCA_ENABLED = os.getenv("DIFFERIX_TCA_ENABLED", "1") == "1"
 
-TOKEN_BUDGET_EDITOR = _safe_int_env("VEGEX_BUDGET_EDITOR", 18000, 2000, 200000)
-TOKEN_BUDGET_REVIEWER = _safe_int_env("VEGEX_BUDGET_REVIEWER", 14000, 2000, 200000)
-TOKEN_BUDGET_RESEARCHER = _safe_int_env("VEGEX_BUDGET_RESEARCHER", 12000, 2000, 200000)
+TOKEN_BUDGET_EDITOR = _safe_int_env("DIFFERIX_BUDGET_EDITOR", 18000, 2000, 200000)
+TOKEN_BUDGET_REVIEWER = _safe_int_env("DIFFERIX_BUDGET_REVIEWER", 14000, 2000, 200000)
+TOKEN_BUDGET_RESEARCHER = _safe_int_env("DIFFERIX_BUDGET_RESEARCHER", 12000, 2000, 200000)
 
 # Fraction of budget actually used (headroom for token estimate error).
 TCA_SAFETY_MARGIN = 0.9
@@ -545,7 +545,7 @@ TCA_LOG_SUMMARY = True
 # ============================================================================
 # These files are the "brain" and "immune system" of DifferiX. In RSI mode,
 # the agent can *propose* changes to them, but they will NOT be applied
-# automatically. They are saved to .vegex/pending_critical_changes/ for human review.
+# automatically. They are saved to .differix/pending_critical_changes/ for human review.
 RSI_CRITICAL_FILES = {
     "main.py",
     "config.py",

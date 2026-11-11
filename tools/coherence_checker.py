@@ -181,7 +181,7 @@ _CSS_CLASS_SELECTOR_RE = re.compile(r"\.([a-zA-Z_][a-zA-Z0-9_-]*)")
 _CSS_VAR_DEF_RE = re.compile(r"(--[a-zA-Z0-9_-]+)\s*:")
 _CSS_VAR_USE_RE = re.compile(r"var\(\s*(--[a-zA-Z0-9_-]+)")
 _CSS_URL_RE = re.compile(r"url\(\s*['\"]?([^)'\"]+)['\"]?\s*\)")
-_CSS_SKIP_PRAGMA = re.compile(r"/\*\s*vegex:\s*skip-coherence-check\s*\*/")
+_CSS_SKIP_PRAGMA = re.compile(r"/\*\s*differix:\s*skip-coherence-check\s*\*/")
 
 
 def _extract_css(styles: str) -> Tuple[Set[str], Set[str], Set[str], List[str]]:
@@ -684,7 +684,7 @@ def _discover_files(
         return html_files, css_files, js_files
 
     ignored_dirs = {
-        ".git", ".vegex", "node_modules", "__pycache__", ".venv", "venv",
+        ".git", ".differix", "node_modules", "__pycache__", ".venv", "venv",
         "dist", "build", "iteration_logs", ".pytest_cache", ".mypy_cache",
     }
 

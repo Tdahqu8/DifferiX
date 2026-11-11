@@ -371,7 +371,7 @@ def run_reflection(
     Run one reflection cycle. Never raises.
 
     force=True ignores the minimum-occurrence threshold. Use for the
-    manual `vegex reflect` command.
+    manual `differix reflect` command.
     """
     result = ReflectionResult(success=False)
     try:

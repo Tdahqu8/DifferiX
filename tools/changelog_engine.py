@@ -1,10 +1,10 @@
 """
 tools/changelog_engine.py
 --------------------------
-Project-scoped iteration log manager for VegeX.
+Project-scoped iteration log manager for DifferiX.
 
 Logs live at `<project_root>/iteration_logs/`, not at the process cwd.
-This removes the class of bug where a `vegex` process launched from one
+This removes the class of bug where a `differix` process launched from one
 directory writes logs into a different project's tree.
 
 Public API:

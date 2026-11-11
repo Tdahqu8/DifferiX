@@ -1,7 +1,7 @@
 """
 tools/structure_index.py
 -------------------------
-Byte-deterministic AST structure index for the VegeX codebase.
+Byte-deterministic AST structure index for the DifferiX codebase.
 
 Per your directive (Override → Option 1), main.py will call rebuild() on
 every validation step. That means freshness is guaranteed and the cost is
@@ -35,7 +35,7 @@ SCHEMA_VERSION = "2.0.0"
 
 # Files we never index.
 _IGNORED_DIRS = {
-    ".git", ".vegex", "__pycache__", ".pytest_cache", ".mypy_cache",
+    ".git", ".differix", "__pycache__", ".pytest_cache", ".mypy_cache",
     ".venv", "venv", "env", "node_modules", "bin", "obj", "build",
     "dist", ".idea", ".vscode", "iteration_logs", "AI_Orchestrator_Backups",
 }

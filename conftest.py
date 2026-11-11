@@ -70,8 +70,8 @@ def isolate_state_files(
     not into the sandbox.
     """
     # Rewrite known config paths to tmp_path so nothing writes to the sandbox.
-    monkeypatch.setenv("VEGEX_STATE_DIR", str(tmp_path))
-    monkeypatch.setenv("VEGEX_MEMORY_DIR", str(tmp_path / ".vegex"))
+    monkeypatch.setenv("DIFFERIX_STATE_DIR", str(tmp_path))
+    monkeypatch.setenv("DIFFERIX_MEMORY_DIR", str(tmp_path / ".differix"))
 
 
 # ---------------------------------------------------------------------------

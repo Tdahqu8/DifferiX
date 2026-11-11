@@ -4,7 +4,7 @@ tools/drift_guard.py
 Detects external modifications to critical files during a running pipeline.
 
 Problem this solves:
-    A single VegeX process holds an in-memory snapshot of state (and often
+    A single Differix process holds an in-memory snapshot of state (and often
     of the target file's pre-write content) across multiple pipeline steps.
     If the user edits state.json or the target file between steps, the
     process operates on stale data and writes decisions based on it.

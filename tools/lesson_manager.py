@@ -279,7 +279,7 @@ def get_ranked_lessons_scored(
     limit: int = 5,
     stages: Optional[Sequence[str]] = None,
     scope_type=None,
-    scope_value: str = "vegex",
+    scope_value: str = "differix",
     record_trigger: bool = True,
 ):
     """
@@ -319,7 +319,7 @@ def get_ranked_lessons_context(
     query: str,
     limit: int = 5,
     stages: Optional[Sequence[str]] = None,
-    scope_value: str = "vegex",
+    scope_value: str = "differix",
     record_trigger: bool = True,
 ) -> str:
     """
@@ -483,7 +483,7 @@ def analyze_lesson_outcome(
 
     Returns (helpful_ids, violated_ids).
 
-    Semantics per the VegeX blueprint §3B:
+    Semantics per the DifferiX blueprint §3B:
       - H increments for every injected lesson when the build passes.
       - V increments only for injected lessons whose distinctive keywords
         appear in the build error output. This prevents penalising a lesson

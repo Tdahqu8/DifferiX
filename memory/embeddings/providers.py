@@ -157,9 +157,9 @@ class OpenRouterEmbeddingProvider(BaseEmbeddingProvider):
                 timeout=self._timeout,
                 default_headers={
                     # OpenRouter requires these for rate-limit attribution.
-                    # They can be any string; the values below identify VegeX.
-                    "HTTP-Referer": "https://github.com/tdahq8/vegex",
-                    "X-Title": "VegeX",
+                    # They can be any string; the values below identify DifferiX.
+                    "HTTP-Referer": "https://github.com/Tdahqu8/DifferiX,
+                    "X-Title": "DifferiX",
                 },
             )
         return self._client

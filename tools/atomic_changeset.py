@@ -1,7 +1,7 @@
 """
 tools/atomic_changeset.py
 --------------------------
-Atomic multi-file change sets for the VegeX editor pipeline.
+Atomic multi-file change sets for the DifferiX editor pipeline.
 
 Root problem this solves: the RSI crash you hit was caused by multi-file
 edits applied non-atomically — file #1 written, file #3 fails sandbox
@@ -11,7 +11,7 @@ half-applied tree and hallucinates a fix.
 This module makes N-file edits behave as either fully-applied or
 fully-rolled-back. On POSIX we can't rename N files in a single syscall,
 but we can:
-  1. Stage all content to .vegex/staging/<uuid>/
+  1. Stage all content to .differix/staging/<uuid>/
   2. Snapshot backups of every file to be touched
   3. Apply replacements one by one
   4. On any failure, restore from the backups
@@ -164,7 +164,7 @@ class ChangeSet:
             return report
 
         root = Path(project_root).resolve()
-        staging_dir = root / ".vegex" / "staging" / uuid.uuid4().hex
+        staging_dir = root / ".differix" / "staging" / uuid.uuid4().hex
         staging_dir.mkdir(parents=True, exist_ok=True)
 
         # back up existing content for every target path

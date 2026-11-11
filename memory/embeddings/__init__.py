@@ -1,5 +1,5 @@
 """
-Embedding provider package for the VegeX memory subsystem.
+Embedding provider package for the DifferiX memory subsystem.
 
 Providers implement a minimal interface:
     .dim        -> int

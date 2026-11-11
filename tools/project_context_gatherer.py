@@ -54,7 +54,7 @@ _BLOCKED_BASENAMES = {
 
 # Directories we never recurse into for related context.
 _BLOCKED_DIRS = {
-    ".git", ".vegex", "node_modules", "__pycache__", ".venv", "venv",
+    ".git", ".differix", "node_modules", "__pycache__", ".venv", "venv",
     "dist", "build", ".pytest_cache", ".mypy_cache", "iteration_logs",
     ".next", ".nuxt", ".cache", "coverage",
 }

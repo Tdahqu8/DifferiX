@@ -1,7 +1,7 @@
 """
 tools/compiler.py
 -----------------
-Universal multi-language syntax / build verification for VegeX.
+Universal multi-language syntax / build verification for DifferiX.
 
 Public API (compatible with the previous implementation):
     run_universal_build(project_path, language, target_file) -> (bool, str)

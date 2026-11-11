@@ -5,7 +5,7 @@ Bridges the JSON-file lesson system with the SQLite-backed A-Score memory engine
 
 Design:
   - lessons/*.json  → source of truth (content, human-editable, git-tracked)
-  - .vegex/lessons.db → regenerable ranking index (vectors, T/H/V stats)
+  - .differix/lessons.db → regenerable ranking index (vectors, T/H/V stats)
 
 Embedding providers are selected via `build_embedding_provider(config)`.
 On bridge initialization, `check_and_migrate` ensures the storage's vector
@@ -256,7 +256,7 @@ class LessonMemoryBridge:
             violation_count=violation,
             is_critical=self.STAGE_CRITICAL.get(stage, False),
             scope_type=MemoryScope.PROJECT,
-            scope_value="vegex",
+            scope_value="differix",
             created_at=created_at,
             last_used_at=last_used,
         )
@@ -311,7 +311,7 @@ class LessonMemoryBridge:
         limit: int = 5,
         stages: Optional[Sequence[str]] = None,
         scope_type: MemoryScope = MemoryScope.PROJECT,
-        scope_value: str = "vegex",
+        scope_value: str = "differix",
         record_trigger: bool = True,
     ) -> List[ScoredMemoryNode]:
         if not query or not query.strip():

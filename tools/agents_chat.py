@@ -59,12 +59,12 @@ def get_iteration_logs_prompt(state=None):
 def handle_msg_command(project_dir=".", state=None):
     state = state or {}
     if HAS_RICH:
-        console.print(Panel("[bold cyan]VegeX Interactive Agent Terminal[/bold cyan]", border_style="cyan"))
+        console.print(Panel("[bold cyan]DifferiX Interactive Agent Terminal[/bold cyan]", border_style="cyan"))
         console.print("Select an agent to communicate with:")
         console.print(" [1] Researcher (Super-User: Full Lesson & Memory Access)\n [2] Editor (Consumer: Read-Only Promoted Lessons)\n [3] Reviewer (Consumer: Read-Only Promoted Lessons)")
         choice = Prompt.ask("Select agent", choices=["1", "2", "3"], default="1")
     else:
-        print("\n--- VegeX Interactive Agent Terminal ---")
+        print("\n--- DifferiX Interactive Agent Terminal ---")
         print("Select an agent:\n [1] Researcher (Super User)\n [2] Editor\n [3] Reviewer")
         choice = input("Select agent (1-3) [default 1]: ").strip() or "1"
         if choice not in AGENTS:

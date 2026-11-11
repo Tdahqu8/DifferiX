@@ -22,8 +22,8 @@ def get_editor_model() -> str:
     return getattr(config, "MODEL_EDITOR", "anthropic/claude-3.7-sonnet")
 
 
-VEGEX_FRAMEWORK_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-VEGEX_FRAMEWORK_CORE_FILES = {
+DIFFERIX_FRAMEWORK_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+DIFFERIX_FRAMEWORK_CORE_FILES = {
     ".env", "config.py", "state.json", "deduplicate.py",
     "agents_chat.py", "agents_chat_2.py", "PROJECT_STRUCTURE.md",
 }
@@ -43,16 +43,16 @@ def resolve_sandboxed_path(target_file: str, project_dir: str = ".") -> str:
         )
 
     filename = os.path.basename(target_path)
-    if filename in VEGEX_FRAMEWORK_CORE_FILES:
+    if filename in DIFFERIX_FRAMEWORK_CORE_FILES:
         target_dir = os.path.dirname(target_path)
         try:
-            is_editing_framework_core = os.path.samefile(target_dir, VEGEX_FRAMEWORK_ROOT)
+            is_editing_framework_core = os.path.samefile(target_dir, DIFFERIX_FRAMEWORK_ROOT)
         except (FileNotFoundError, AttributeError):
-            is_editing_framework_core = (target_dir == VEGEX_FRAMEWORK_ROOT)
+            is_editing_framework_core = (target_dir == DIFFERIX_FRAMEWORK_ROOT)
 
         if is_editing_framework_core:
             raise PermissionError(
-                f"SANDBOX VIOLATION: Editing core framework file '{filename}' in VeGeX root is forbidden."
+                f"SANDBOX VIOLATION: Editing core framework file '{filename}' in DifferiX root is forbidden."
             )
 
     return target_path

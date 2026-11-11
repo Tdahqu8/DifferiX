@@ -1,7 +1,7 @@
 """
 tools/cost_predictor.py
 -----------------------
-Lightweight pre-flight cost estimator for the VegeX pipeline.
+Lightweight pre-flight cost estimator for the DifferiX pipeline.
 
 Given a researcher plan (a list of step dicts) it routes each step to a
 model via the same complexity assessment used at call time, prices the

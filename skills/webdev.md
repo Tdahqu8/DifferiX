@@ -4,7 +4,7 @@ name: Webdev
 extensions: [.html]
 ---
 
-# VegeX WebDev Skill
+# DIfferiX WebDev Skill
 
 Rules for building and editing modern web pages. These rules are
 non-negotiable. Deviating breaks the pipeline's cross-file coherence

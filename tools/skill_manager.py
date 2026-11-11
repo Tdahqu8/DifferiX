@@ -4,7 +4,7 @@ from typing import Dict, Any, Optional
 
 CONFIG_FILE = "skills_config.json"
 
-# Framework-level skills directory (relative to the VegeX install root)
+# Framework-level skills directory (relative to the DifferiX install root)
 _FRAMEWORK_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 _FRAMEWORK_SKILLS_DIR = os.path.join(_FRAMEWORK_ROOT, "skills")
 

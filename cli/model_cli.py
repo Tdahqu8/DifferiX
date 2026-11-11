@@ -78,7 +78,7 @@ def print_header(title: str) -> None:
 
 def display_llm_status() -> None:
     """Display current agent model bindings with context and pricing specifications."""
-    print_header("VegeX Multi-Agent LLM Model Bindings")
+    print_header("DifferiX Multi-Agent LLM Model Bindings")
 
     bindings = get_agent_bindings()
     cached_models = get_cached_models()  # dict: model_id -> spec

@@ -1,5 +1,5 @@
 """
-VegeX memory subsystem — public API.
+DifferiX memory subsystem — public API.
 
 Lesson nodes are MemoryNodes. Ranking is A-Score (blueprint §3).
 SQLite is the runtime ranking index; lessons/*.json is the source of truth.

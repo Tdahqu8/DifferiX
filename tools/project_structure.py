@@ -1,10 +1,10 @@
 """
 tools/project_structure.py
 --------------------------
-Human-readable project tree generator for VegeX.
+Human-readable project tree generator for DifferiX.
 
 Produces `PROJECT_STRUCTURE.md` at the project root and a small metadata
-sidecar at `.vegex/tree_meta.json` (gitignored).
+sidecar at `.differix/tree_meta.json` (gitignored).
 
 Change detection uses a SHA-256 content hash over every tracked file — NOT
 the mtime+size pair used by the older implementation, which silently
@@ -35,12 +35,12 @@ from typing import Any, Dict, List
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
-_VEGEX_DIR = ".vegex"
+_DIFFERIX_DIR = ".differix"
 _TREE_META_FILE = "tree_meta.json"
 _TREE_MD_FILE = "PROJECT_STRUCTURE.md"
 
 _IGNORE_DIRS = {
-    ".git", ".vegex", "__pycache__", ".pytest_cache", ".mypy_cache",
+    ".git", ".differix", "__pycache__", ".pytest_cache", ".mypy_cache",
     ".ruff_cache", ".tox", ".venv", "venv", "env", "node_modules",
     "bin", "obj", "build", "dist", ".idea", ".vscode",
     "iteration_logs", "AI_Orchestrator_Backups",
@@ -192,7 +192,7 @@ def generate_or_update_structure(project_path: str) -> Dict[str, Any]:
     files = _iter_tracked_files(root)
     current_fp = _compute_fingerprint(root, files)
 
-    veg_dir = root / _VEGEX_DIR
+    veg_dir = root / _DIFFERIX_DIR
     meta_path = veg_dir / _TREE_META_FILE
     md_path = root / _TREE_MD_FILE
 

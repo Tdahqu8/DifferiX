@@ -1,11 +1,11 @@
 """
 tools/session_adr.py
 ---------------------
-Compressed session history (Architecture Decision Records) for VegeX.
+Compressed session history (Architecture Decision Records) for DifferiX.
 
 Storage layout:
-  .vegex/session_adr.jsonl         append-only, one JSON object per line
-  .vegex/session_adr.compact.json  derived, written periodically
+  .differix/session_adr.jsonl         append-only, one JSON object per line
+  .differix/session_adr.compact.json  derived, written periodically
 
 Raw JSONL is the source of truth. Compact JSON is regenerated from the raw
 when the raw file exceeds RAW_COMPACT_THRESHOLD lines, or on explicit call.
@@ -87,7 +87,7 @@ class ADREntry:
 class SessionADR:
     def __init__(self, project_root: str) -> None:
         self.root = Path(project_root).resolve()
-        self.dir = self.root / ".vegex"
+        self.dir = self.root / ".differix"
         self.dir.mkdir(parents=True, exist_ok=True)
         self.raw_path = self.dir / "session_adr.jsonl"
         self.compact_path = self.dir / "session_adr.compact.json"
