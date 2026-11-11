@@ -1,4 +1,3 @@
-```markdown
 <div align="center">
   <h1>DifferiX</h1>
   <p><strong>The Deterministic, Local-First OS for Autonomous AI Agents.</strong></p>
