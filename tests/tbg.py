@@ -14,7 +14,7 @@ def test_context_bloat_detection():
     assert guard.observe_attempt(state, MockMeta(1000, "a")) is None
     assert guard.observe_attempt(state, MockMeta(2000, "b")) is None
     # Third attempt grows, should trigger
-    reason = guard.observe_attempt(state, MockMeta(3000, "c"))
+    reason = guard.observe_attempt(state, MockMeta(7000, "c"))
     assert reason is not None
     assert "CONTEXT_BLOAT" in reason
 

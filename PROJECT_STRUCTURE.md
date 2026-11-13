@@ -1,6 +1,6 @@
 # Project Structure
 
-Generated on: 2026-11-13T11:31:34Z
+Generated on: 2026-11-13T14:42:42Z
 
 ```
 ├── .env.example
@@ -46,21 +46,6 @@ Generated on: 2026-11-13T11:31:34Z
 │   │   ├── The palette extractor derived muted and dim text colors.json
 │   │   ├── agent_output_validated_against_plan.json
 │   │   ├── css_var_must_resolve_before_extraction.json
-│   │   ├── deepseek_json_20261016_015f5c.json
-│   │   ├── deepseek_json_20261016_036cac.json
-│   │   ├── deepseek_json_20261016_1282d0.json
-│   │   ├── deepseek_json_20261016_13a2e2.json
-│   │   ├── deepseek_json_20261016_34ce4f.json
-│   │   ├── deepseek_json_20261016_40a8c3.json
-│   │   ├── deepseek_json_20261016_52d9b2.json
-│   │   ├── deepseek_json_20261016_6345e0.json
-│   │   ├── deepseek_json_20261016_733e20.json
-│   │   ├── deepseek_json_20261016_89fb0b.json
-│   │   ├── deepseek_json_20261016_90086c.json
-│   │   ├── deepseek_json_20261016_ac10f5.json
-│   │   ├── deepseek_json_20261016_b388b5.json
-│   │   ├── deepseek_json_20261016_f29d1e.json
-│   │   ├── deepseek_json_20261016_fad2bb.json
 │   │   ├── drift_pin_after_internal_write.json
 │   │   ├── editor_must_see_sibling_files.json
 │   │   ├── external_service_requires_health_probe.json
@@ -80,7 +65,8 @@ Generated on: 2026-11-13T11:31:34Z
 │       ├── lesson_02.json
 │       ├── lesson_04.json
 │       ├── lessons_03.json
-│       └── update_schema_when_adding_steps.json
+│       ├── update_schema_when_adding_steps.json
+│       └── websites.json
 ├── license.txt
 ├── main.py
 ├── memory/
@@ -114,6 +100,8 @@ Generated on: 2026-11-13T11:31:34Z
 │   ├── researcher_rules.md
 │   ├── reviewer_rules.md
 │   ├── roblox_luau.md
+│   ├── style_3d_webgl.md
+│   ├── style_clean_saas.md
 │   ├── video_scenario.md
 │   ├── webdev.md
 │   └── webdev_reviewer.md
@@ -142,6 +130,7 @@ Generated on: 2026-11-13T11:31:34Z
 │   ├── atomic_changeset.py
 │   ├── backup_manager.py
 │   ├── changelog_engine.py
+│   ├── code_tools.py
 │   ├── coherence_checker.py
 │   ├── compiler.py
 │   ├── component_normalizer.py

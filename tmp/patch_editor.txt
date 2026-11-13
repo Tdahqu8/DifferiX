@@ -1,0 +1,93 @@
+cat > /tmp/patch_editor.txt << 'PATCH_EOF'
+<<<<<<< SEARCH
+    if session_context:
+        bundle.add_text(Tier.T1_ACTION_CORE, "session", session_context)
+
+    if target_code:
+=======
+    if session_context:
+        bundle.add_text(Tier.T1_ACTION_CORE, "session", session_context)
+
+    # === FIX 1: inject full function source when replace_function is expected ===
+    _subtask_lower = str(state.get("active_subtask") or "").lower()
+    if "replace_function" in _subtask_lower and target_file.endswith(".py") and target_code:
+        import ast as _ast_ctx
+        try:
+            _tree_ctx = _ast_ctx.parse(target_code)
+            for _node_ctx in _tree_ctx.body:
+                if isinstance(_node_ctx, _ast_ctx.FunctionDef) and _node_ctx.name.lower() in _subtask_lower:
+                    _full_src = _ast_ctx.get_source_segment(target_code, _node_ctx)
+                    if _full_src:
+                        bundle.add_text(
+                            Tier.T1_ACTION_CORE,
+                            "full_function_under_edit",
+                            f"=== FULL SOURCE OF '{_node_ctx.name}' (preserve ALL logic) ===\n```python\n{_full_src}\n```"
+                        )
+                    break
+        except Exception:
+            pass
+
+    if target_code:
+>>>>>>> REPLACE
+
+<<<<<<< SEARCH
+                        except SyntaxError as e:
+                            raise ValueError(
+                                f"Invalid function body for {self.name}: {str(e)}"
+                            ) from e
+                        
+                        # Get the exact source lines including decorators
+=======
+                        except SyntaxError as e:
+                            raise ValueError(
+                                f"Invalid function body for {self.name}: {str(e)}"
+                            ) from e
+                        
+                        # === FIX 2: sanity check — reject destructive replacements ===
+                        _orig_lines = node.end_lineno - node.lineno
+                        _new_lines = len(self.new_body.splitlines())
+                        if _orig_lines > 10 and _new_lines < _orig_lines * 0.6:
+                            raise ValueError(
+                                f"DESTRUCTIVE REPLACEMENT: '{self.name}' has {_orig_lines} lines in original, "
+                                f"but new_body has only {_new_lines}. This suggests you deleted logic. "
+                                f"Include ALL existing lines in new_body — only add/modify what's needed. "
+                                f"Or use 'insert_code' operation instead."
+                            )
+                        
+                        _stub_markers = [
+                            "# ... existing", "# rest of",
+                            "# todo: keep", "# original implementation",
+                            "# rest of the original",
+                        ]
+                        if any(m in self.new_body.lower() for m in _stub_markers):
+                            raise ValueError(
+                                f"STUB DETECTED in replacement for '{self.name}'. "
+                                f"Do not use placeholders like '# ... existing code'. "
+                                f"Use 'insert_code' operation instead, or include full function body."
+                            )
+                        
+                        # Get the exact source lines including decorators
+>>>>>>> REPLACE
+
+<<<<<<< SEARCH
+            elif op_type == "add_dependency":
+                from tools.code_tools import add_dependency
+                res = add_dependency(op_data.get("package", ""))
+                return {"ok": res["ok"], "code": original_content, "matched": 1, "failed": [{"reason": res.get("reason", "")}] if not res["ok"] else [], "mode": "tool_add_dependency"}
+=======
+            elif op_type == "add_dependency":
+                from tools.code_tools import add_dependency
+                res = add_dependency(op_data.get("package", ""))
+                return {"ok": res["ok"], "code": original_content, "matched": 1, "failed": [{"reason": res.get("reason", "")}] if not res["ok"] else [], "mode": "tool_add_dependency"}
+                
+            elif op_type == "insert_code":
+                from tools.code_tools import insert_code_in_function
+                res = insert_code_in_function(
+                    target_path,
+                    op_data.get("function", ""),
+                    op_data.get("anchor", ""),
+                    op_data.get("code", ""),
+                )
+                return {"ok": res["ok"], "code": original_content, "matched": 1, "failed": [{"reason": res.get("reason", "")}] if not res["ok"] else [], "mode": "tool_insert_code"}
+>>>>>>> REPLACE
+PATCH_EOF

@@ -1,0 +1,79 @@
+cat > /tmp/patch_code_tools.txt << 'PATCH_EOF'
+<<<<<<< SEARCH
+        return {"ok": True, "fixed": []}
+    except Exception as e:
+        return {"ok": False, "reason": str(e)}
+=======
+        return {"ok": True, "fixed": []}
+    except Exception as e:
+        return {"ok": False, "reason": str(e)}
+
+
+def insert_code_in_function(file_path: str, func_name: str, anchor: str, code: str) -> dict:
+    """Insert code inside an existing Python function, after a specific anchor.
+
+    Safer alternative to replace_function when adding lines to a large function.
+    Requires only: function name, an anchor string inside the function, and the
+    new code. Existing function logic is preserved untouched.
+    """
+    if not os.path.exists(file_path) or not file_path.endswith(".py"):
+        return {"ok": False, "reason": "Only supports existing Python files"}
+
+    if not func_name or not anchor or not code:
+        return {"ok": False, "reason": "Missing required arguments (function, anchor, code)"}
+
+    try:
+        with open(file_path, "r", encoding="utf-8") as f:
+            content = f.read()
+
+        tree = ast.parse(content)
+        target_func = None
+        for node in tree.body:
+            if isinstance(node, ast.FunctionDef) and node.name == func_name:
+                target_func = node
+                break
+
+        if target_func is None:
+            return {"ok": False, "reason": f"Function '{func_name}' not found"}
+
+        func_start = target_func.lineno - 1
+        func_end = target_func.end_lineno
+        func_lines = content.splitlines()[func_start:func_end]
+
+        if not any(anchor in line for line in func_lines):
+            return {"ok": False, "reason": f"Anchor '{anchor[:60]}' not found inside '{func_name}'"}
+
+        anchor_idx = None
+        for i, line in enumerate(func_lines):
+            if anchor in line:
+                anchor_idx = i
+                break
+
+        if anchor_idx is None:
+            return {"ok": False, "reason": "Anchor not found"}
+
+        anchor_line = func_lines[anchor_idx]
+        anchor_indent = len(anchor_line) - len(anchor_line.lstrip())
+
+        new_lines = code.splitlines()
+        indented = [((" " * anchor_indent) + ln if ln.strip() else ln) for ln in new_lines]
+
+        insert_at = anchor_idx + 1
+        while insert_at < len(func_lines) and not func_lines[insert_at].strip():
+            insert_at += 1
+
+        for _ln in reversed(indented):
+            func_lines.insert(insert_at, _ln)
+
+        all_lines = content.splitlines()
+        all_lines[func_start:func_end] = func_lines
+
+        with open(file_path, "w", encoding="utf-8") as f:
+            f.write("\n".join(all_lines) + "\n")
+
+        return {"ok": True, "reason": f"Inserted {len(new_lines)} lines into '{func_name}'"}
+
+    except Exception as e:
+        return {"ok": False, "reason": str(e)}
+>>>>>>> REPLACE
+PATCH_EOF

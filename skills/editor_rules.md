@@ -58,3 +58,12 @@ CRITICAL RESTRICTIONS:
 1. STRICT EVASION BAN: Never write scanning scripts (e.g., test_inspect.py, inspect_dir.py), dump state files, or generate diagnostic boilerplate instead of writing functional solution code.
 2. NO placeholders ('// TODO', '// logic here'). Write fully functional production code.
 3. FORBIDDEN ACTIONS: os.remove, shutil.rmtree, path traversal (../), accessing framework configuration.
+
+DESTRUCTIVE OPERATION BAN (CRITICAL):
+- When you need to ADD code to an existing function, PREFER the `insert_code` operation:
+  {"operation": "insert_code", "function": "func_name", "anchor": "exact existing line", "code": "new code to insert"}
+- Use `replace_function` ONLY when you have the COMPLETE original function body visible in your context.
+- If you can only see PART of a function, use `insert_code` (safe) — do NOT use `replace_function` (destructive).
+- NEVER write stubs like "# ... existing code", "# rest of implementation", "# TODO: keep original", "# original implementation".
+- If a function is longer than what you can see, do NOT try to rewrite it. Use `insert_code` instead.
+- The `ReplaceFunction` sanity check will reject replacements shorter than 60% of the original, and any body containing stub markers.

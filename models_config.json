@@ -1,6 +1,6 @@
 {
   "bindings": {
-    "researcher": "google/gemini-4-hydrogen:batch",
+    "researcher": "google/gemini-4-hydrogen",
     "editor": "deepseek/deepseek-chat",
     "reviewer": "xiaomi/mimo-v2.6-pro"
   },

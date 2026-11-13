@@ -1731,6 +1731,29 @@ class OrchestratorConsole:
                             related_context=related_ctx,
                         )
                     self.update_costs(meta, agent_name="editor")
+                    # Detect if the plan asks for function replacement
+                    plan_mentions_function = "replace_function" in str(state.get("active_subtask") or "")
+                    if plan_mentions_function and target_file.endswith(".py"):
+                        # Find the function name from the subtask
+                        import re as _re
+                        m = _re.search(r"function[\s:]+['\"]?(\w+)", str(state.get("active_subtask") or ""))
+                        if m:
+                            func_name = m.group(1)
+                            # Extract full source of that function
+                            try:
+                                import ast as _ast
+                                tree = _ast.parse(target_code)
+                                for node in _tree.body:
+                                    if isinstance(node, _ast.FunctionDef) and node.name == func_name:
+                                        full_func_src = _ast.get_source_segment(target_code, node)
+                                        bundle.add_text(
+                                            Tier.T1_ACTION_CORE,
+                                            "full_function_under_edit",
+                                            f"=== FULL SOURCE OF '{func_name}' (you MUST preserve all this logic) ===\n```python\n{full_func_src}\n```"
+                                        )
+                                        break
+                            except Exception:
+                                pass
                 # === BEHAVIOR GUARD CHECK ===
                     # Pass project_root to state so guard can check paths
                     state["project_root"] = self.proj["path"]
@@ -2595,9 +2618,9 @@ class OrchestratorConsole:
 
                 # Re-sync lessons into SQLite so new observations become rankable
                 try:
-                    from tools.lesson_memory_bridge import LessonMemoryBridge
                     bridge = LessonMemoryBridge(
-                        lessons_root=os.path.join(self.proj["path"], "lessons")
+                        lessons_root=os.path.join(self.proj["path"], "lessons"),
+                        db_path=os.path.join(self.proj["path"], ".vegex", "lessons.db")
                     )
                     bridge.sync_all()
                 except Exception as exc:

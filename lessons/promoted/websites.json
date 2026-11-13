@@ -1,0 +1,72 @@
+[
+  {
+    "id": "missing_referenced_behavioral_script",
+    "root_cause": "HTML files referenced an external `script.js` via `<script src=\"...\">`, but the file was never generated. Core behaviors (revealing hidden IDE elements, removing loaders, applying theme classes, rendering galleries) silently failed, leaving the pages in a broken state.",
+    "details": {
+      "rule": "Every referenced external script must be explicitly planned and written. If a script is responsible for toggling `hidden` attributes or applying dynamic classes, verify its existence in the file manifest before writing the HTML. If only 3 files are requested, inline the logic or ensure the exact file is generated."
+    }
+  },
+  {
+    "id": "css_block_termination_error",
+    "root_cause": "A media query block (`@media (max-width: 768px)`) was missing a closing brace. This caused all subsequent CSS rules (desktop layouts, hero sections, reset rules) to be swallowed into the mobile media query, breaking the entire desktop layout and causing style bleeding.",
+    "details": {
+      "rule": "Validate CSS bracket pairing programmatically before writing. Every `{` must have a matching `}` at the same nesting level. Missing closing braces catastrophically change the CSS parse tree and must be caught before outputting the file."
+    }
+  },
+  {
+    "id": "undefined_css_custom_properties",
+    "root_cause": "CSS declarations used variables (`var(--space-3xl)`, `var(--border-accent)`) that were never defined in `:root`. When a custom property is undefined, the browser silently drops the entire declaration, breaking padding, borders, and layouts.",
+    "details": {
+      "rule": "When generating CSS, every `var(--x)` reference must have a corresponding `--x` definition in `:root`. Validate the custom property table against all usage before writing. Never assume a variable exists just because it looks standard."
+    }
+  },
+  {
+    "id": "duplicate_css_selector_conflict",
+    "root_cause": "The same selectors (e.g., `.hero-headline`, `.btn`, `.hero-section`) were defined multiple times across the stylesheet with conflicting values. Later rules overrode earlier ones unpredictably, causing responsive design breakage and layout bouncing.",
+    "details": {
+      "rule": "Consolidate CSS rules. A selector should ideally be defined once, or its multiple definitions must be strictly intentional (e.g., base + media query). Never blindly append stylesheets; audit for existing selectors and merge changes into the original block."
+    }
+  },
+  {
+    "id": "dom_class_dependency_mismatch",
+    "root_cause": "CSS expected the JavaScript to add an `is-loaded` class to fade in a canvas and `is-visible` classes to reveal site sections. The JS never added these classes, resulting in permanently invisible elements and infinite loading spinners.",
+    "details": {
+      "rule": "If a CSS rule depends on a class being added dynamically by JS (e.g., `.is-loaded`, `.is-visible`), the generated JS must explicitly contain `classList.add` for those exact strings. Cross-reference state classes between CSS and JS."
+    }
+  },
+  {
+    "id": "threejs_animation_nan_time",
+    "root_cause": "The `requestAnimationFrame` loop was initially called without a timestamp (or with `undefined`). The first frame calculated `time - lastTime` as `NaN`, which propagated to the object's rotation attributes, permanently freezing the WebGL scene.",
+    "details": {
+      "rule": "Never assume the first argument of a `requestAnimationFrame` callback is defined. Use `performance.now()` as a fallback, or initialize state with a guard clause: `if (!time) return requestAnimationFrame(animate);`."
+    }
+  },
+  {
+    "id": "threejs_layer_z_index_occlusion",
+    "root_cause": "A 3D object (`TorusKnot`) was positioned too close to the camera and had an overpowering emissive intensity. Additionally, a CSS vignette overlay (`::after`) had a higher `z-index` than the canvas, covering the stars and blocking UI interactions.",
+    "details": {
+      "rule": "Background canvases must have a lower `z-index` than UI text and buttons. Pseudo-elements used for vignettes must have `pointer-events: none` and `z-index` layers carefully managed. 3D objects must be scaled and translated conservatively to avoid dominating the screen and obscuring content."
+    }
+  },
+  {
+    "id": "font_load_css_mismatch",
+    "root_cause": "The HTML loaded the `Manrope` font from Google Fonts, but the CSS specified `font-family: 'Lora', serif;`. Because Lora was never loaded, the browser fell back to a generic serif font, ruining the intended design aesthetic.",
+    "details": {
+      "rule": "The `font-family` names declared in CSS must exactly match the font families requested in the HTML `<link>` tags or `@import` rules. Validate that all requested fonts are actually used and all used fonts are actually requested."
+    }
+  },
+  {
+    "id": "threejs_container_missing_dimensions",
+    "root_cause": "A WebGL canvas was mounted into a container (`#sauna-3d-viewer`) that had no explicit `width` or `height` in CSS. The canvas defaulted to 0x0 pixels, making the 3D model completely invisible to the user.",
+    "details": {
+      "rule": "Any DOM element intended to host a canvas or 3D renderer must have explicitly defined dimensions (width/height or aspect-ratio) in the stylesheet. Never rely on intrinsic content to size a canvas container."
+    }
+  },
+  {
+    "id": "missing_base_layout_flexbox",
+    "root_cause": "HTML was written for a complex layout (headers, grids, side-by-side sections), but the CSS omitted fundamental Flexbox or Grid declarations. Elements stacked vertically as block-level default, causing overlapping text, broken navigation bars, and unusable cards.",
+    "details": {
+      "rule": "Structural layout classes (header nav, hero wrappers, grids) must always include explicit `display: flex` or `display: grid` definitions. Do not assume HTML semantics will create a layout without CSS layout properties."
+    }
+  }
+]

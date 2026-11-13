@@ -1,12 +1,14 @@
 import os
 import json
 import re
+import ast
 import config
 from tools.lesson_manager import (
     get_ranked_lessons_for_role,
     get_promoted_lessons_prompt,
 )
 from tools.skill_manager import get_combined_agent_skill
+from tools.code_tools import fix_unclosed_brackets
 
 try:
     from tools.llm_client import safe_chat_completion
@@ -63,43 +65,8 @@ class ModificationPrimitive:
     
     @staticmethod
     def validate_target(content: str, target: str) -> bool:
-        """Validate that target exists in content and is a valid AST node"""
-        if not content or not target:
-            return False
-            
-        # Basic string check first for performance
-        if target not in content:
-            return False
-            
-        # For Python files, verify the target is a valid AST node
-        if content.lstrip().startswith(('def ', 'class ', 'async def ')):
-            try:
-                import ast
-                tree = ast.parse(content)
-                for node in ast.walk(tree):
-                    if isinstance(node, (ast.FunctionDef, ast.ClassDef, ast.AsyncFunctionDef)):
-                        if node.name == target:
-                            return True
-                return False
-            except SyntaxError:
-                return target in content
-                
-        # For JavaScript files, verify the target is a valid class/function
-        if content.lstrip().startswith(('class ', 'function ', 'const ', 'let ', 'var ')):
-            try:
-                import esprima
-                tree = esprima.parseScript(content, {'range': True})
-                for node in esprima.walk(tree):
-                    if (isinstance(node, esprima.nodes.ClassDeclaration) or 
-                        (isinstance(node, esprima.nodes.VariableDeclarator) and 
-                         isinstance(node.init, (esprima.nodes.FunctionExpression, esprima.nodes.ClassExpression)))):
-                        if getattr(node, 'id', None) and node.id.name == target:
-                            return True
-                return False
-            except Exception:
-                return target in content
-                
-        return True
+        """Validate that target exists in content"""
+        return target in content
     
     @staticmethod
     def get_available_symbols(content: str, lang: str) -> list:
@@ -108,101 +75,66 @@ class ModificationPrimitive:
             return []
             
         if lang == "python":
-            import ast
             try:
                 tree = ast.parse(content)
                 symbols = []
                 for node in ast.walk(tree):
                     if isinstance(node, (ast.FunctionDef, ast.ClassDef, ast.AsyncFunctionDef)):
                         try:
-                            # Get full function/class source including decorators
                             start_line = node.lineno - 1
                             end_line = getattr(node, 'end_lineno', node.lineno)
                             
-                            # Handle decorators
                             if node.decorator_list:
                                 start_line = min(d.lineno - 1 for d in node.decorator_list)
                             
-                            # Get source lines safely
                             source_lines = content.splitlines()[start_line:end_line]
                             full_source = '\n'.join(source_lines)
                             
-                            symbol_data = {
+                            symbols.append({
                                 "name": node.name,
                                 "type": type(node).__name__,
                                 "lineno": node.lineno,
                                 "end_lineno": end_line,
-                                "col_offset": node.col_offset,
-                                "end_col_offset": getattr(node, 'end_col_offset', 0),
                                 "source": full_source,
-                                "has_decorators": bool(node.decorator_list),
-                                "valid": True
-                            }
-                            # Add class-specific fields if available
-                            if isinstance(node, ast.ClassDef):
-                                symbol_data["bases"] = [
-                                    base.id for base in node.bases 
-                                    if isinstance(base, ast.Name)
-                                ]
-                                symbol_data["keywords"] = [
-                                    kw.arg for kw in node.keywords 
-                                    if kw.arg is not None
-                                ]
-                            symbols.append(symbol_data)
-                        except (AttributeError, IndexError) as e:
-                            # Skip malformed nodes but continue processing
+                            })
+                        except (AttributeError, IndexError):
                             continue
                 return symbols
             except SyntaxError:
                 return []
-            except Exception as e:
-                # Fallback to simple regex if AST parsing fails completely
-                return []
         elif lang == "javascript":
-            # Enhanced JS function/class extraction with source capture
             symbols = []
             lines = content.splitlines()
-            # Match both traditional functions and arrow functions
             pattern = r"(?:(function\s+(\w+)\s*\()|(class\s+(\w+)\s*{)|(const|let|var)\s+(\w+)\s*=\s*(?:async\s*)?\([^)]*\)\s*=>)"
             for match in re.finditer(pattern, content):
                 start_line = content.count('\n', 0, match.start()) + 1
-                if match.group(2):  # Function match
-                    # Find function end by matching braces
+                if match.group(2):
                     brace_level = 0
                     pos = match.end()
                     while pos < len(content):
-                        if content[pos] == '{':
-                            brace_level += 1
+                        if content[pos] == '{': brace_level += 1
                         elif content[pos] == '}':
                             brace_level -= 1
-                            if brace_level == 0:
-                                break
+                            if brace_level == 0: break
                         pos += 1
                     end_line = content.count('\n', 0, pos) + 1
                     source = '\n'.join(lines[start_line-1:end_line])
                     
-                    name = match.group(2) or match.group(4) or match.group(6)
-                    symbol_type = "FunctionDef" if match.group(1) or match.group(5) else "ClassDef"
-                    
                     symbols.append({
-                        "name": name,
-                        "type": symbol_type,
+                        "name": match.group(2) or match.group(6),
+                        "type": "FunctionDef",
                         "lineno": start_line,
                         "end_lineno": end_line,
-                        "source": source,
-                        "is_arrow": bool(match.group(5))
+                        "source": source
                     })
-                else:  # Class match
-                    # Find class end by matching braces
+                else:
                     brace_level = 0
                     pos = match.end()
                     while pos < len(content):
-                        if content[pos] == '{':
-                            brace_level += 1
+                        if content[pos] == '{': brace_level += 1
                         elif content[pos] == '}':
                             brace_level -= 1
-                            if brace_level == 0:
-                                break
+                            if brace_level == 0: break
                         pos += 1
                     end_line = content.count('\n', 0, pos) + 1
                     source = '\n'.join(lines[start_line-1:end_line])
@@ -226,7 +158,6 @@ class ReplaceFunction(ModificationPrimitive):
         
     def apply(self, content: str, lang: str) -> str:
         if lang == "python":
-            import ast
             try:
                 tree = ast.parse(content)
                 lines = content.splitlines()
@@ -234,38 +165,44 @@ class ReplaceFunction(ModificationPrimitive):
                 
                 for node in ast.walk(tree):
                     if isinstance(node, ast.FunctionDef) and node.name == self.name:
-                        # Validate the new function body is syntactically valid and maintains scope
                         try:
                             new_func = ast.parse(self.new_body)
                             if not isinstance(new_func, ast.Module) or len(new_func.body) != 1:
-                                raise ValueError(
-                                    f"Function body for {self.name} must contain exactly one function definition"
-                                )
+                                raise ValueError("Function body must contain exactly one function definition")
                             if not isinstance(new_func.body[0], ast.FunctionDef):
-                                raise ValueError(
-                                    f"Function body for {self.name} must be a function definition"
-                                )
-                            
-                            # Validate indentation matches original
-                            first_line = self.new_body.splitlines()[0] if self.new_body else ""
-                            if first_line and not first_line[0].isspace() and node.col_offset > 0:
-                                raise ValueError(
-                                    f"Function {self.name} must maintain original indentation level"
-                                )
+                                raise ValueError("Function body must be a function definition")
                         except SyntaxError as e:
-                            raise ValueError(
-                                f"Invalid function body for {self.name}: {str(e)}"
-                            ) from e
+                            raise ValueError(f"Invalid function body: {str(e)}")
                         
-                        # Get the exact source lines including decorators
+                        # === FIX 2: sanity check — reject destructive replacements ===
+                        _orig_lines = node.end_lineno - node.lineno
+                        _new_lines = len(self.new_body.splitlines())
+                        if _orig_lines > 10 and _new_lines < _orig_lines * 0.6:
+                            raise ValueError(
+                                f"DESTRUCTIVE REPLACEMENT: '{self.name}' has {_orig_lines} lines in original, "
+                                f"but new_body has only {_new_lines}. This suggests you deleted logic. "
+                                f"Include ALL existing lines in new_body — only add/modify what's needed. "
+                                f"Or use 'insert_code' operation instead."
+                            )
+                        
+                        _stub_markers = [
+                            "# ... existing", "# rest of",
+                            "# todo: keep", "# original implementation",
+                            "# rest of the original",
+                        ]
+                        if any(m in self.new_body.lower() for m in _stub_markers):
+                            raise ValueError(
+                                f"STUB DETECTED in replacement for '{self.name}'. "
+                                f"Do not use placeholders like '# ... existing code'. "
+                                f"Use 'insert_code' operation instead, or include full function body."
+                            )
+                        
                         start_line = node.lineno - 1
                         end_line = node.end_lineno
                         
-                        # Handle decorators
                         if node.decorator_list:
                             start_line = min(d.lineno - 1 for d in node.decorator_list)
                         
-                        # Reconstruct with proper indentation
                         indent = ' ' * node.col_offset
                         new_body = [indent + line for line in self.new_body.splitlines()]
                         
@@ -274,14 +211,11 @@ class ReplaceFunction(ModificationPrimitive):
                         break
                 
                 if not modified:
-                    available = self.get_available_symbols(content, lang)
-                    raise ValueError(
-                        f"Function '{self.name}' not found. Available functions: {available}"
-                    )
+                    raise ValueError(f"Function '{self.name}' not found")
                 
                 return "\n".join(lines)
             except SyntaxError as e:
-                raise ValueError(f"Target file syntax error: {str(e)}") from e
+                raise ValueError(f"Target file syntax error: {str(e)}")
         return content
 
 class ReplaceClass(ModificationPrimitive):
@@ -291,27 +225,8 @@ class ReplaceClass(ModificationPrimitive):
         self.name = name
         self.new_content = new_content
         
-    def get_available_symbols(self, content: str, lang: str) -> list:
-        """Get available class names in the content"""
-        if lang == "python":
-            import ast
-            try:
-                tree = ast.parse(content)
-                return [node.name for node in ast.walk(tree) if isinstance(node, ast.ClassDef)]
-            except SyntaxError:
-                return []
-        elif lang == "javascript":
-            try:
-                # Find all JavaScript class names
-                pattern = r"(?:export\s+)?(?:default\s+)?class\s+(\w+)"
-                return re.findall(pattern, content)
-            except re.error:
-                return []
-        return []
-        
     def apply(self, content: str, lang: str) -> str:
         if lang == "python":
-            import ast
             try:
                 tree = ast.parse(content)
                 lines = content.splitlines()
@@ -319,27 +234,15 @@ class ReplaceClass(ModificationPrimitive):
                 
                 for node in ast.walk(tree):
                     if isinstance(node, ast.ClassDef) and node.name == self.name:
-                        if not self._validate_ast_node(node, content):
-                            continue
-                            
-                        # Get the exact source lines including decorators
                         start_line = node.lineno - 1
                         end_line = node.end_lineno
                         
-                        # Handle decorators
                         if node.decorator_list:
                             start_line = min(d.lineno - 1 for d in node.decorator_list)
                         
-                        # Validate new content
-                        new_tree = ast.parse(self.new_content)
-                        if not all(isinstance(n, (ast.ClassDef, ast.Expr)) for n in new_tree.body):
-                            raise ValueError("Replacement content must contain only class definitions")
-                            
-                        # Preserve original indentation
                         indent = ' ' * node.col_offset
                         new_content = [indent + line for line in self.new_content.splitlines()]
                         
-                        # Preserve trailing whitespace/newlines after class
                         while end_line < len(lines) and not lines[end_line].strip():
                             end_line += 1
                             
@@ -348,38 +251,8 @@ class ReplaceClass(ModificationPrimitive):
                         break
                 
                 return "\n".join(lines) if modified else content
-            except (SyntaxError, ValueError) as e:
-                print(f"ReplaceClass failed: {str(e)}")
-        elif lang == "javascript":
-            try:
-                # Parse JavaScript class using regex pattern
-                class_pattern = re.compile(
-                    r"(?P<decorators>(?:@\w+\(.*?\)\s+)*)"
-                    r"(?:export\s+)?(?:default\s+)?class\s+"
-                    + re.escape(self.name)
-                    + r"\s*(?:extends\s+\w+)?\s*{(?P<body>.*?)}",
-                    re.DOTALL
-                )
-                
-                match = class_pattern.search(content)
-                if not match:
-                    return content
-                    
-                # Validate new class syntax
-                if not re.match(r"^(?:export\s+)?(?:default\s+)?class\s+\w+", self.new_content.strip()):
-                    raise ValueError("Replacement content must be a valid JavaScript class")
-                    
-                # Preserve decorators if present
-                decorators = match.group("decorators").strip()
-                if decorators:
-                    new_content = decorators + "\n" + self.new_content.strip()
-                else:
-                    new_content = self.new_content.strip()
-                    
-                # Replace the class while preserving surrounding code
-                return content[:match.start()] + new_content + content[match.end():]
-            except (re.error, ValueError) as e:
-                print(f"ReplaceClass failed: {str(e)}")
+            except SyntaxError:
+                pass
         return content
 
 class InsertAfter(ModificationPrimitive):
@@ -425,7 +298,6 @@ def _flexible_find(content: str, search_block: str) -> tuple:
             ratio = difflib.SequenceMatcher(None, search_lines_stripped, window_str).ratio()
             if ratio > best_ratio:
                 best_ratio = ratio
-                # Calculate char indices
                 best_start = sum(len(line) + 1 for line in content_lines[:i])
                 best_end = best_start + len(window_str)
 
@@ -436,18 +308,11 @@ def _flexible_find(content: str, search_block: str) -> tuple:
 
 
 def _looks_like_full_rewrite(diff_text: str) -> bool:
-    """Detect a response that intends to be a full-file rewrite."""
     if re.search(r"<{4,}\s*SEARCH", diff_text):
         return False
-
-    fences = re.findall(
-        r"```(?:\w+)?\n(.*?)```",
-        diff_text,
-        re.DOTALL,
-    )
+    fences = re.findall(r"```(?:\w+)?\n(.*?)```", diff_text, re.DOTALL)
     if len(fences) != 1:
         return False
-
     return fences[0].count("\n") >= 30
 
 
@@ -471,7 +336,8 @@ def apply_diff_blocks(
             op_data = json.loads(json_match.group(1))
             op_type = op_data.get("operation")
             lang = "python" if target_file.endswith(".py") else "javascript"
-            
+            target_path = os.path.join(os.getcwd(), target_file)
+
             if op_type == "replace_function":
                 modifier = ReplaceFunction(op_data["name"], op_data["new_body"])
                 new_content = modifier.apply(original_content, lang)
@@ -487,6 +353,41 @@ def apply_diff_blocks(
                 new_content = modifier.apply(original_content, lang)
                 return {"ok": True, "code": new_content, "matched": 1, "failed": [], "mode": "ast_insert_after"}
                 
+            elif op_type == "fix_syntax":
+                from tools.code_tools import fix_unclosed_brackets
+                res = fix_unclosed_brackets(target_path)
+                return {"ok": res["ok"], "code": original_content, "matched": 1, "failed": [], "mode": "tool_fix_syntax"}
+
+            elif op_type == "check_syntax":
+                from tools.code_tools import run_syntax_check
+                res = run_syntax_check(target_path)
+                return {"ok": res["ok"], "code": original_content, "matched": 1, "failed": [{"reason": res.get("reason", "")}] if not res["ok"] else [], "mode": "tool_check_syntax"}
+                
+            elif op_type == "run_snippet":
+                from tools.code_tools import run_snippet
+                res = run_snippet(op_data.get("code", ""), timeout=op_data.get("timeout", 2))
+                return {"ok": res["ok"], "code": original_content, "matched": 1, "failed": [{"reason": res.get("stderr", "")}] if not res["ok"] else [], "mode": "tool_run_snippet"}
+                
+            elif op_type == "check_imports":
+                from tools.code_tools import check_imports
+                res = check_imports(target_path)
+                return {"ok": res["ok"], "code": original_content, "matched": 1, "failed": [{"reason": f"Missing: {m}"} for m in res.get("missing", [])], "mode": "tool_check_imports"}
+                
+            elif op_type == "add_dependency":
+                from tools.code_tools import add_dependency
+                res = add_dependency(op_data.get("package", ""))
+                return {"ok": res["ok"], "code": original_content, "matched": 1, "failed": [{"reason": res.get("reason", "")}] if not res["ok"] else [], "mode": "tool_add_dependency"}
+                
+            elif op_type == "insert_code":
+                from tools.code_tools import insert_code_in_function
+                res = insert_code_in_function(
+                    target_path,
+                    op_data.get("function", ""),
+                    op_data.get("anchor", ""),
+                    op_data.get("code", ""),
+                )
+                return {"ok": res["ok"], "code": original_content, "matched": 1, "failed": [{"reason": res.get("reason", "")}] if not res["ok"] else [], "mode": "tool_insert_code"}
+                
         except Exception as e:
             return {
                 "ok": False, "code": original_content, "matched": 0,
@@ -496,109 +397,52 @@ def apply_diff_blocks(
 
     is_empty_file = not original_content.strip()
 
-    # HARD RULE: Never allow full rewrite of an existing HTML file.
     if target_file.endswith((".html", ".htm")) and len(original_content) > 200:
         allow_full_rewrite = False
 
     full_rewrite_intent = is_empty_file or allow_full_rewrite or _looks_like_full_rewrite(diff_text)
 
-    # Mode A: full rewrite
     if full_rewrite_intent:
         code_match = re.search(
             r"```(?:python|csharp|cs|luau|lua|xml|json|html|css|js|ts|jsx|tsx|yaml|yml|sql|sh|bash|shell)?\n(.*?)```",
-            diff_text,
-            re.DOTALL,
+            diff_text, re.DOTALL,
         )
         candidate = code_match.group(1).strip() if code_match else diff_text.strip()
         candidate = re.sub(r"^TARGET_FILE:\s*[^\n]+\n?", "", candidate).strip()
 
         clean_lines = [
-            line
-            for line in candidate.splitlines()
+            line for line in candidate.splitlines()
             if not re.match(r"^(<{4,}|={4,}|>{4,}|<<<<<<<|=======|>>>>>>>)", line.strip())
         ]
         candidate_code = "\n".join(clean_lines)
 
-        if original_content.strip().startswith("{"):
-            try:
-                json.loads(original_content)
-                json.loads(candidate_code)
-            except json.JSONDecodeError:
-                return {
-                    "ok": False,
-                    "code": original_content,
-                    "matched": 0,
-                    "failed": [{
-                        "search_preview": "JSON_VALIDATION_FAILED",
-                        "reason": "Candidate output is invalid JSON.",
-                    }],
-                    "mode": "rejected",
-                }
-
-        # JS syntax guard for full rewrite
         if target_file.endswith((".js", ".mjs", ".cjs")):
             import tempfile
             import subprocess
-
             tmp_path = None
             try:
-                with tempfile.NamedTemporaryFile(
-                    mode="w", suffix=".js", delete=False, encoding="utf-8"
-                ) as tmp:
+                with tempfile.NamedTemporaryFile(mode="w", suffix=".js", delete=False, encoding="utf-8") as tmp:
                     tmp.write(candidate_code)
                     tmp_path = tmp.name
-                check = subprocess.run(
-                    ["node", "--check", tmp_path],
-                    capture_output=True,
-                    text=True,
-                    timeout=12,
-                )
+                check = subprocess.run(["node", "--check", tmp_path], capture_output=True, text=True, timeout=12)
                 if check.returncode != 0:
                     err = (check.stderr or check.stdout or "").strip()[:500]
-                    return {
-                        "ok": False,
-                        "code": original_content,
-                        "matched": 0,
-                        "failed": [{
-                            "search_preview": "JS_SYNTAX_ERROR",
-                            "reason": f"JS_SYNTAX_ERROR after full rewrite: {err}",
-                        }],
-                        "mode": "rejected",
-                    }
-            except FileNotFoundError:
-                pass
+                    return {"ok": False, "code": original_content, "matched": 0, "failed": [{"reason": f"JS_SYNTAX_ERROR: {err}"}], "mode": "rejected"}
             except Exception:
                 pass
             finally:
                 if tmp_path and os.path.exists(tmp_path):
-                    try:
-                        os.remove(tmp_path)
-                    except OSError:
-                        pass
+                    try: os.remove(tmp_path)
+                    except OSError: pass
 
-        return {
-            "ok": True,
-            "code": candidate_code,
-            "matched": 0,
-            "failed": [],
-            "mode": "full_rewrite",
-        }
+        return {"ok": True, "code": candidate_code, "matched": 0, "failed": [], "mode": "full_rewrite"}
 
     # Mode B: SEARCH/REPLACE
     pattern = r"<{4,}\s*SEARCH[ \t]*\n(.*?)\n?={4,}[ \t]*\n(.*?)\n?>{4,}\s*REPLACE"
     matches = re.findall(pattern, diff_text, re.DOTALL)
 
     if not matches:
-        return {
-            "ok": False,
-            "code": original_content,
-            "matched": 0,
-            "failed": [{
-                "search_preview": "NO_SEARCH_BLOCKS",
-                "reason": "No SEARCH/REPLACE blocks found in patch for non-empty file.",
-            }],
-            "mode": "rejected",
-        }
+        return {"ok": False, "code": original_content, "matched": 0, "failed": [{"reason": "NO_SEARCH_BLOCKS"}], "mode": "rejected"}
 
     updated_content = original_content
     failed_blocks = []
@@ -606,80 +450,16 @@ def apply_diff_blocks(
 
     for idx, (search_block, replace_block) in enumerate(matches, 1):
         start, end = _flexible_find(updated_content, search_block)
-
         if start is not None:
             updated_content = updated_content[:start] + replace_block + updated_content[end:]
             matched_count += 1
         else:
-            tail_preview = "\n".join(updated_content.splitlines()[-8:])
-            failed_blocks.append({
-                "block_index": idx,
-                "search_preview": search_block[:180] + ("..." if len(search_block) > 180 else ""),
-                "reason": (
-                    "NOT_FOUND: SEARCH block does not match current file content. "
-                    "Copy the anchor verbatim from the TARGET FILE view. "
-                    f"Current file tail:\n{tail_preview}"
-                ),
-            })
+            failed_blocks.append({"block_index": idx, "search_preview": search_block[:150], "reason": "NOT_FOUND"})
 
-    # Partial success: keep applied blocks if at least one matched
     if matched_count == 0:
-        return {
-            "ok": False,
-            "code": original_content,
-            "matched": 0,
-            "failed": failed_blocks,
-            "mode": "rejected",
-        }
+        return {"ok": False, "code": original_content, "matched": 0, "failed": failed_blocks, "mode": "rejected"}
 
-    # JS syntax guard on the result
-    if target_file.endswith((".js", ".mjs", ".cjs")):
-        import tempfile
-        import subprocess
-
-        tmp_path = None
-        try:
-            with tempfile.NamedTemporaryFile(
-                mode="w", suffix=".js", delete=False, encoding="utf-8"
-            ) as tmp:
-                tmp.write(updated_content)
-                tmp_path = tmp.name
-            check = subprocess.run(
-                ["node", "--check", tmp_path],
-                capture_output=True,
-                text=True,
-                timeout=12,
-            )
-            if check.returncode != 0:
-                err = (check.stderr or check.stdout or "").strip()[:500]
-                return {
-                    "ok": False,
-                    "code": original_content,
-                    "matched": matched_count,
-                    "failed": failed_blocks + [{
-                        "search_preview": "JS_SYNTAX_ERROR",
-                        "reason": f"JS_SYNTAX_ERROR after apply: {err}",
-                    }],
-                    "mode": "rejected",
-                }
-        except FileNotFoundError:
-            pass
-        except Exception:
-            pass
-        finally:
-            if tmp_path and os.path.exists(tmp_path):
-                try:
-                    os.remove(tmp_path)
-                except OSError:
-                    pass
-
-    return {
-        "ok": True,
-        "code": updated_content,
-        "matched": matched_count,
-        "failed": failed_blocks,
-        "mode": "search_replace" if not failed_blocks else "partial_search_replace",
-    }
+    return {"ok": True, "code": updated_content, "matched": matched_count, "failed": failed_blocks, "mode": "search_replace" if not failed_blocks else "partial_search_replace"}
 
 
 def _build_retrieval_query(state: dict, target_file: str) -> str:
@@ -701,12 +481,7 @@ def run_editor(
     related_context="",
 ):
     from tools.context_assembler import (
-        ContextBundle,
-        Tier,
-        TierItem,
-        ContextAssembler,
-        smart_slice_code,
-        dedupe_logs,
+        ContextBundle, Tier, TierItem, ContextAssembler, smart_slice_code, dedupe_logs,
     )
 
     target_file = state.get("target_file") or "main.py"
@@ -727,15 +502,12 @@ def run_editor(
     if not session_context:
         retrieval_query = _build_retrieval_query(state, target_file)
         _scored, lessons_block, lesson_node_ids = get_ranked_lessons_for_role(
-            role="editor",
-            query=retrieval_query,
-            limit=getattr(config, "LESSONS_RETRIEVAL_LIMIT", 5),
+            role="editor", query=retrieval_query, limit=getattr(config, "LESSONS_RETRIEVAL_LIMIT", 5),
         )
         if not lessons_block:
             lessons_block = get_promoted_lessons_prompt()
         state["active_lesson_node_ids"] = list(lesson_node_ids or [])
 
-    # --- DYNAMIC SKILL INJECTION ---
     active_styles = state.get("web_style", "")
     if isinstance(active_styles, str) and active_styles:
         active_styles = [active_styles]
@@ -756,8 +528,7 @@ def run_editor(
         "target_file": target_file,
         "goal": state.get("goal", ""),
         "subtask": state.get("active_subtask", ""),
-        "research": state.get("research_analysis")
-                     or state.get("research_data", {}).get("analysis", ""),
+        "research": state.get("research_analysis") or state.get("research_data", {}).get("analysis", ""),
         "style_requirement": ", ".join(active_styles) or "default",
     }
     if editor_feedback:
@@ -771,11 +542,23 @@ def run_editor(
         "Do NOT use SEARCH/REPLACE blocks."
         if is_new_or_empty else
         "FILE STATUS: EXISTING FILE WITH CONTENT.\n"
-        "INSTRUCTION: Output one or more SEARCH/REPLACE blocks strictly matching existing code. "
-        "Do NOT output the full file. Use the format:\n"
+        "INSTRUCTION: You can use EITHER SEARCH/REPLACE blocks OR a JSON AST Modification.\n\n"
+        "Option A (Preferred): JSON AST Modification\n"
+        "Return EXACTLY one JSON object inside a ```json block:\n"
+        "{\"operation\": \"replace_function\", \"name\": \"func_name\", \"new_body\": \"def func_name():\\n    pass\"}\n"
+        "Available operations: 'replace_function', 'replace_class', 'insert_after', 'fix_syntax', 'insert_code'.\n\n"
+        "Option A+ (Auto-Fix Tools - HIGHLY RECOMMENDED):\n"
+        "- To format the whole file: {\"operation\": \"format\"}\n"
+        "- To lint the file and find errors: {\"operation\": \"lint\"}\n"
+        "- To add a missing import: {\"operation\": \"add_import\", \"module\": \"os\", \"name\": \"path\"}\n\n"
+        "Level 2 Tools (execution):\n"
+        "- To verify syntax: {\"operation\": \"check_syntax\"}\n"
+        "- To run isolated Python snippet: {\"operation\": \"run_snippet\", \"code\": \"print(2+2)\"}\n"
+        "- To check all imports resolve: {\"operation\": \"check_imports\"}\n"
+        "- To install a dependency: {\"operation\": \"add_dependency\", \"package\": \"requests\"}\n\n"
+        "Option B (Fallback): SEARCH/REPLACE\n"
         "<<<<<<< SEARCH\n(verbatim lines from the file)\n=======\n(replacement lines)\n>>>>>>> REPLACE\n"
-        "CRITICAL RULE: If the file is truncated and you cannot see the whole thing, "
-        "you MUST still use SEARCH/REPLACE targeting the visible lines. Never attempt a full rewrite of an existing HTML file."
+        "CRITICAL RULE: If the file is truncated, use the JSON AST Modification option targeting the function name."
     )
 
     coherence_note = ""
@@ -784,18 +567,11 @@ def run_editor(
             "=== CRITICAL: CROSS-FILE COHERENCE ===\n"
             "The RELATED FILES section below shows other files in this project. "
             "You MUST use the exact class names, CSS variables, and function names "
-            "already defined there. Do NOT invent new top-level names. If you need "
-            "a new class, derive it from an existing prefix (e.g. .hero-title → "
-            ".hero-subtitle).\n\n"
+            "already defined there.\n\n"
         )
 
-    # ---- Build TCA bundle ----
     bundle = ContextBundle()
-
-    # T0: system prompt (cacheable prefix)
     bundle.add_text(Tier.T0_STATIC, "skills", system_prompt)
-
-    # T1: action core
     action_core = (
         f"{coherence_note}"
         f"=== FILE WRITING MODE ===\n{file_mode_instruction}\n\n"
@@ -806,88 +582,65 @@ def run_editor(
     if session_context:
         bundle.add_text(Tier.T1_ACTION_CORE, "session", session_context)
 
-    # T2: target file, sliced for prompt (full file still used for apply)
+    # === FIX 1: inject full function source when replace_function is expected ===
+    _subtask_lower = str(state.get("active_subtask") or "").lower()
+    if "replace_function" in _subtask_lower and target_file.endswith(".py") and target_code:
+        import ast as _ast_ctx
+        try:
+            _tree_ctx = _ast_ctx.parse(target_code)
+            for _node_ctx in _tree_ctx.body:
+                if isinstance(_node_ctx, _ast_ctx.FunctionDef) and _node_ctx.name.lower() in _subtask_lower:
+                    _full_src = _ast_ctx.get_source_segment(target_code, _node_ctx)
+                    if _full_src:
+                        bundle.add_text(
+                            Tier.T1_ACTION_CORE,
+                            "full_function_under_edit",
+                            f"=== FULL SOURCE OF '{_node_ctx.name}' (preserve ALL logic) ===\n```python\n{_full_src}\n```"
+                        )
+                    break
+        except Exception:
+            pass
+
     if target_code:
         if is_new_or_empty:
-            bundle.add_text(
-                Tier.T2_TARGET_SLICE,
-                "target",
-                f"=== TARGET FILE ({target_file}) ===\n[empty — create new file]",
-            )
+            bundle.add_text(Tier.T2_TARGET_SLICE, "target", f"=== TARGET FILE ({target_file}) ===\n[empty]")
         else:
-            hints = " ".join(filter(None, [
-                str(state.get("active_subtask") or ""),
-                str(state.get("research_analysis") or "")[:400],
-            ]))
-
-            # JS/TS files are dense — give them more room
+            hints = " ".join(filter(None, [str(state.get("active_subtask") or ""), str(state.get("research_analysis") or "")[:400]]))
             is_js = target_file.endswith((".js", ".mjs", ".cjs", ".ts", ".tsx"))
-            total_lines = len(target_code.splitlines())
-            if is_js:
-                max_normal = 900 if total_lines < 900 else 500
-                max_tight = 300 if total_lines < 900 else 180
-            else:
-                max_normal = 150
-                max_tight = 50
-
-            sliced = smart_slice_code(
-                target_code, target_file, max_lines=max_normal, hints=hints
-            )
-            tightly = smart_slice_code(
-                target_code, target_file, max_lines=max_tight, hints=hints
-            )
+            max_normal = 900 if is_js and len(target_code.splitlines()) < 900 else (500 if is_js else 150)
+            max_tight = 300 if is_js and len(target_code.splitlines()) < 900 else (180 if is_js else 50)
+            
+            sliced = smart_slice_code(target_code, target_file, max_lines=max_normal, hints=hints)
+            tightly = smart_slice_code(target_code, target_file, max_lines=max_tight, hints=hints)
+            
             bundle.add(TierItem(
-                tier=Tier.T2_TARGET_SLICE,
-                key="target",
+                tier=Tier.T2_TARGET_SLICE, key="target",
                 content=f"=== TARGET FILE ({target_file}) ===\n{sliced}",
-                fallback_content=(
-                    f"=== TARGET FILE ({target_file}) [HEAVILY TRUNCATED] ===\n{tightly}"
-                    if tightly != sliced else ""
-                ),
+                fallback_content=f"=== TARGET FILE ({target_file}) [HEAVILY TRUNCATED] ===\n{tightly}" if tightly != sliced else "",
                 optional=False,
             ))
 
-    # T3: related files
     if related_context:
         bundle.add_text(Tier.T3_INTERFACE, "related", related_context)
-
-    # T4: lessons
     if lessons_block:
         bundle.add_text(Tier.T4_ENRICHMENT, "lessons", lessons_block)
 
-    # T5: deduped logs
     if iteration_logs.strip():
-        include_logs = (
-            iteration_number > 0
-            or getattr(config, "TCA_INCLUDE_FEEDBACK_ON_FIRST_CYCLE", False)
-        )
-        if include_logs:
+        if iteration_number > 0 or getattr(config, "TCA_INCLUDE_FEEDBACK_ON_FIRST_CYCLE", False):
             deduped = dedupe_logs(iteration_logs, max_errors=5)
             if deduped:
-                bundle.add_text(
-                    Tier.T5_FEEDBACK,
-                    "logs",
-                    f"=== RECENT ERRORS (deduplicated) ===\n{deduped}",
-                    optional=True,
-                )
+                bundle.add_text(Tier.T5_FEEDBACK, "logs", f"=== RECENT ERRORS ===\n{deduped}", optional=True)
 
-    # ---- Assemble ----
-    budget = getattr(config, "TOKEN_BUDGET_EDITOR", 18000)
     assembled = ContextAssembler(
-        budget=budget,
+        budget=getattr(config, "TOKEN_BUDGET_EDITOR", 18000),
         safety_margin=getattr(config, "TCA_SAFETY_MARGIN", 0.9),
     ).assemble(bundle)
 
     if getattr(config, "TCA_LOG_SUMMARY", True):
-        try:
-            print(assembled.log_summary())
-        except Exception:
-            pass
+        try: print(assembled.log_summary())
+        except Exception: pass
 
-    # ---- Call LLM ----
-    extra_body_params = {"reasoning": {"max_tokens": 8192}}
     active_model = get_editor_model()
-
     response, provider = safe_chat_completion(
         active_model,
         messages=[
@@ -896,13 +649,11 @@ def run_editor(
         ],
         temperature=0.15,
         max_tokens=10000,
-        extra_body=extra_body_params,
+        extra_body={"reasoning": {"max_tokens": 8192}},
     )
 
     if not response or not getattr(response, "choices", None) or len(response.choices) == 0:
-        raise RuntimeError(
-            f"Error: Editor received no choices from model provider ({active_model})."
-        )
+        raise RuntimeError(f"Error: Editor received no choices ({active_model}).")
 
     choice = response.choices[0]
     message = getattr(choice, "message", None)
@@ -917,17 +668,8 @@ def run_editor(
     result_text = result_text.strip()
 
     if not result_text:
-        if finish_reason == "length":
-            raise RuntimeError(
-                f"Error: Editor response was truncated due to max_tokens limit "
-                f"(finish_reason='length'). Model: {active_model}"
-            )
-        raise RuntimeError(
-            f"Error: Editor received empty response from model ({active_model}). "
-            f"finish_reason: {finish_reason}"
-        )
+        raise RuntimeError(f"Error: Editor received empty response ({active_model}). finish_reason: {finish_reason}")
 
-    # Reload target_code if the model requested a different file
     target_file_match = re.search(r"TARGET_FILE:\s*([^\n]+)", result_text)
     if target_file_match:
         raw_path = target_file_match.group(1).strip()
@@ -940,15 +682,12 @@ def run_editor(
             except Exception:
                 pass
 
-    # Sanitize hallucinated diff markers in full rewrites
     if "=======" in result_text and "<<<<<<<" not in result_text:
         result_text = result_text.replace("=======", "")
         result_text = re.sub(r"={4,}", "", result_text)
 
-    # Apply against FULL file
     apply_res = apply_diff_blocks(
-        target_code,
-        result_text,
+        target_code, result_text,
         allow_full_rewrite=state.get("allow_full_rewrite", False),
         target_file=target_file,
     )
@@ -960,19 +699,9 @@ def run_editor(
         "apply_result": apply_res,
     }
 
-    # Surface partial-apply info so the next iteration can finish the job
     if apply_res.get("mode") == "partial_search_replace" and apply_res.get("failed"):
-        failed_previews = "; ".join(
-            f"block {f.get('block_index')}: {f.get('reason', '')[:120]}"
-            for f in apply_res["failed"][:3]
-        )
-        state["editor_feedback"] = (
-            f"PARTIAL APPLY: {apply_res.get('matched', 0)} block(s) applied, "
-            f"but {len(apply_res['failed'])} block(s) failed.\n"
-            f"{failed_previews}\n"
-            f"Re-issue ONLY the failed SEARCH/REPLACE blocks using anchors "
-            f"copied verbatim from the current file."
-        )
+        failed_previews = "; ".join(f"block {f.get('block_index')}: {f.get('reason', '')[:120]}" for f in apply_res["failed"][:3])
+        state["editor_feedback"] = f"PARTIAL APPLY: {apply_res.get('matched', 0)} block(s) applied, {len(apply_res['failed'])} failed.\n{failed_previews}\nRe-issue ONLY the failed blocks."
 
     usage = getattr(response, "usage", None)
     usage_meta = type("Meta", (), {
@@ -984,193 +713,3 @@ def run_editor(
     })
 
     return state, usage_meta
-
-
-def _validate_ast_node(node: ast.AST, content: str) -> bool:
-    """Validate that an AST node has all required attributes and can be safely modified"""
-    required_attrs = {
-        ast.FunctionDef: ['name', 'lineno', 'col_offset', 'body'],
-        ast.ClassDef: ['name', 'lineno', 'col_offset', 'bases', 'body'],
-        ast.AsyncFunctionDef: ['name', 'lineno', 'col_offset', 'body']
-    }
-    
-    node_type = type(node)
-    if node_type not in required_attrs:
-        return False
-        
-    for attr in required_attrs[node_type]:
-        if not hasattr(node, attr):
-            return False
-            
-    # Verify source positions are within content bounds
-    try:
-        lines = content.splitlines()
-        if node.lineno > len(lines):
-            return False
-        if hasattr(node, 'end_lineno') and node.end_lineno > len(lines):
-            return False
-    except Exception:
-        return False
-        
-    return True
-
-
-class ReplaceClass(ModificationPrimitive):
-    """Replace a class definition in Python or JavaScript code using AST parsing"""
-    
-    def __init__(self, name: str, new_content: str):
-        self.name = name
-        self.new_content = new_content
-        
-    def apply(self, content: str, lang: str) -> str:
-        """Replace the class definition in content using AST parsing"""
-        if not self.validate_target(content, self.name):
-            raise ValueError(f"Target class '{self.name}' not found in content")
-            
-        # Check for commented-out version of the class in JavaScript
-        if lang == "javascript":
-            # Check single-line comments
-            if re.search(rf'//\s*class\s+{self.name}\b', content):
-                raise ValueError(f"Target class '{self.name}' appears in single-line commented code - refusing to modify")
-            
-            # Check multi-line comments
-            if re.search(rf'\/\*\s*class\s+{self.name}\b', content):
-                raise ValueError(f"Target class '{self.name}' appears in multi-line commented code - refusing to modify")
-            
-            # Check for commented class expressions
-            if re.search(rf'//\s*(?:const|let|var)\s+{self.name}\s*=\s*class\b', content):
-                raise ValueError(f"Target class '{self.name}' appears as commented class expression - refusing to modify")
-            
-        if lang == "python":
-            import ast
-            try:
-                tree = ast.parse(content)
-            except SyntaxError as e:
-                raise ValueError(f"Failed to parse Python code: {str(e)}")
-            
-            # Find and replace the class node
-            for node in ast.walk(tree):
-                if isinstance(node, ast.ClassDef) and node.name == self.name:
-                    try:
-                        new_tree = ast.parse(self.new_content)
-                    except SyntaxError as e:
-                        raise ValueError(f"Failed to parse replacement Python code: {str(e)}")
-                        
-                    if len(new_tree.body) != 1 or not isinstance(new_tree.body[0], ast.ClassDef):
-                        raise ValueError("Replacement content must contain exactly one class definition")
-                        
-                    # Replace the node in the tree
-                    node.body = new_tree.body[0].body
-                    node.bases = new_tree.body[0].bases
-                    node.decorator_list = new_tree.body[0].decorator_list
-                    node.keywords = new_tree.body[0].keywords
-                    
-                    # Regenerate source with original formatting preserved
-                    try:
-                        return ast.unparse(tree)
-                    except Exception as e:
-                        raise ValueError(f"Failed to generate Python code: {str(e)}")
-                    
-        elif lang == "javascript":
-            import esprima
-            from escodegen import generate
-            
-            try:
-                # Parse original content with comments and locations
-                tree = esprima.parseScript(content, {
-                    'range': True,
-                    'comment': True,
-                    'tolerant': True
-                })
-            except Exception as e:
-                raise ValueError(f"Failed to parse JavaScript code: {str(e)}")
-            
-            # Find the class node to replace
-            for node in esprima.walk(tree):
-                # Skip nodes inside comments
-                if hasattr(node, 'leadingComments') and node.leadingComments:
-                    continue
-                if hasattr(node, 'trailingComments') and node.trailingComments:
-                    continue
-                if ((isinstance(node, esprima.nodes.ClassDeclaration) and node.id.name == self.name) or
-                    (isinstance(node, esprima.nodes.VariableDeclarator) and 
-                     isinstance(node.init, (esprima.nodes.FunctionExpression, esprima.nodes.ClassExpression)) and
-                     node.id.name == self.name)):
-                    
-                    try:
-                        new_tree = esprima.parseScript(self.new_content, {
-                            'range': True,
-                            'comment': True
-                        })
-                    except Exception as e:
-                        raise ValueError(f"Failed to parse replacement JavaScript code: {str(e)}")
-                        
-                    if len(new_tree.body) != 1:
-                        raise ValueError("Replacement content must contain exactly one class/function definition")
-                        
-                    # Replace the node
-                    if isinstance(node, esprima.nodes.ClassDeclaration):
-                        replacement = new_tree.body[0]
-                        if not isinstance(replacement, esprima.nodes.ClassDeclaration):
-                            raise ValueError("Replacement must be a class declaration")
-                        node.body = replacement.body
-                        node.superClass = replacement.superClass
-                    else:
-                        replacement = new_tree.body[0]
-                        if isinstance(replacement, esprima.nodes.ClassDeclaration):
-                            node.init = esprima.nodes.ClassExpression(
-                                body=replacement.body,
-                                superClass=replacement.superClass
-                            )
-                        elif isinstance(replacement, esprima.nodes.FunctionDeclaration):
-                            node.init = esprima.nodes.FunctionExpression(
-                                params=replacement.params,
-                                body=replacement.body
-                            )
-                        else:
-                            raise ValueError("Replacement must be a class or function")
-                    
-                    # Handle nested classes by checking parent scope
-                    if hasattr(node, 'parent') and isinstance(node.parent, esprima.nodes.ClassBody):
-                        # This is a nested class - we need to replace it within its parent class
-                        parent_class = node.parent.parent
-                        if not isinstance(parent_class, esprima.nodes.ClassDeclaration):
-                            raise ValueError(f"Cannot replace nested class '{self.name}' - invalid parent scope")
-                        
-                        # Find the method containing this nested class
-                        for method in parent_class.body.body:
-                            if (isinstance(method, esprima.nodes.MethodDefinition) and 
-                                isinstance(method.value, esprima.nodes.FunctionExpression) and
-                                any(isinstance(n, esprima.nodes.ClassDeclaration) and n.id.name == self.name 
-                                    for n in esprima.walk(method.value.body))):
-                                raise ValueError(f"Cannot replace nested class '{self.name}' inside method '{method.key.name}' - unsupported scope")
-                    
-                    # Regenerate source
-                    try:
-                        return generate(tree)
-                    except Exception as e:
-                        raise ValueError(f"Failed to generate code after replacement: {str(e)}")
-                    
-        raise ValueError(f"Unsupported language '{lang}' or failed to replace class '{self.name}'")
-
-    def test_multi_line_commented_js_class(self):
-        """Test that multi-line commented JS classes are properly detected and rejected"""
-        content = """/*
- * This is a multi-line comment
- * containing a class definition
- * 
- * class CommentedClass {
- *   method() {
- *     return 'should not be detected';
- *   }
- * }
- */
-class RealClass {
-  realMethod() {
-    return 'this is the real class';
-  }
-}"""
-        # Should not detect CommentedClass as a valid target
-        self.assertFalse(ReplaceClass.validate_target(content, "CommentedClass"))
-        # Should detect RealClass as valid
-        self.assertTrue(ReplaceClass.validate_target(content, "RealClass"))
