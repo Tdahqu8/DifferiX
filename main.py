@@ -2597,12 +2597,13 @@ class OrchestratorConsole:
                 try:
                     from tools.lesson_memory_bridge import LessonMemoryBridge
                     bridge = LessonMemoryBridge(
-                        lessons_root=os.path.join(self.proj["path"], "lessons"),
-                        db_path=os.path.join(self.proj["path"], ".vegex", "lessons.db")
+                        lessons_root=os.path.join(self.proj["path"], "lessons")
                     )
                     bridge.sync_all()
                 except Exception as exc:
-                    console.print(f"[dim yellow]Bridge sync after reflection failed: {exc}[/dim yellow]")
+                    console.print(
+                        f"[dim yellow]Bridge sync after reflection failed: {exc}[/dim yellow]"
+                    )
 
                 # Return to whatever step we came from
                 previous = state.pop("_pre_reflect_step", "research")

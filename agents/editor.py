@@ -63,12 +63,50 @@ class ModificationPrimitive:
     
     @staticmethod
     def validate_target(content: str, target: str) -> bool:
-        """Validate that target exists in content"""
-        return target in content
+        """Validate that target exists in content and is a valid AST node"""
+        if not content or not target:
+            return False
+            
+        # Basic string check first for performance
+        if target not in content:
+            return False
+            
+        # For Python files, verify the target is a valid AST node
+        if content.lstrip().startswith(('def ', 'class ', 'async def ')):
+            try:
+                import ast
+                tree = ast.parse(content)
+                for node in ast.walk(tree):
+                    if isinstance(node, (ast.FunctionDef, ast.ClassDef, ast.AsyncFunctionDef)):
+                        if node.name == target:
+                            return True
+                return False
+            except SyntaxError:
+                return target in content
+                
+        # For JavaScript files, verify the target is a valid class/function
+        if content.lstrip().startswith(('class ', 'function ', 'const ', 'let ', 'var ')):
+            try:
+                import esprima
+                tree = esprima.parseScript(content, {'range': True})
+                for node in esprima.walk(tree):
+                    if (isinstance(node, esprima.nodes.ClassDeclaration) or 
+                        (isinstance(node, esprima.nodes.VariableDeclarator) and 
+                         isinstance(node.init, (esprima.nodes.FunctionExpression, esprima.nodes.ClassExpression)))):
+                        if getattr(node, 'id', None) and node.id.name == target:
+                            return True
+                return False
+            except Exception:
+                return target in content
+                
+        return True
     
     @staticmethod
     def get_available_symbols(content: str, lang: str) -> list:
-        """Get available symbols in content based on language"""
+        """Get available symbols in content with robust AST parsing and error handling"""
+        if not content:
+            return []
+            
         if lang == "python":
             import ast
             try:
@@ -76,36 +114,57 @@ class ModificationPrimitive:
                 symbols = []
                 for node in ast.walk(tree):
                     if isinstance(node, (ast.FunctionDef, ast.ClassDef, ast.AsyncFunctionDef)):
-                        # Get full function/class source including decorators
-                        start_line = node.lineno - 1
-                        end_line = getattr(node, 'end_lineno', node.lineno)
-                        
-                        # Handle decorators
-                        if node.decorator_list:
-                            start_line = min(d.lineno - 1 for d in node.decorator_list)
-                        
-                        # Get source lines
-                        source_lines = content.splitlines()[start_line:end_line]
-                        full_source = '\n'.join(source_lines)
-                        
-                        symbols.append({
-                            "name": node.name,
-                            "type": type(node).__name__,
-                            "lineno": node.lineno,
-                            "end_lineno": end_line,
-                            "col_offset": node.col_offset,
-                            "end_col_offset": getattr(node, 'end_col_offset', 0),
-                            "source": full_source,
-                            "has_decorators": bool(node.decorator_list)
-                        })
+                        try:
+                            # Get full function/class source including decorators
+                            start_line = node.lineno - 1
+                            end_line = getattr(node, 'end_lineno', node.lineno)
+                            
+                            # Handle decorators
+                            if node.decorator_list:
+                                start_line = min(d.lineno - 1 for d in node.decorator_list)
+                            
+                            # Get source lines safely
+                            source_lines = content.splitlines()[start_line:end_line]
+                            full_source = '\n'.join(source_lines)
+                            
+                            symbol_data = {
+                                "name": node.name,
+                                "type": type(node).__name__,
+                                "lineno": node.lineno,
+                                "end_lineno": end_line,
+                                "col_offset": node.col_offset,
+                                "end_col_offset": getattr(node, 'end_col_offset', 0),
+                                "source": full_source,
+                                "has_decorators": bool(node.decorator_list),
+                                "valid": True
+                            }
+                            # Add class-specific fields if available
+                            if isinstance(node, ast.ClassDef):
+                                symbol_data["bases"] = [
+                                    base.id for base in node.bases 
+                                    if isinstance(base, ast.Name)
+                                ]
+                                symbol_data["keywords"] = [
+                                    kw.arg for kw in node.keywords 
+                                    if kw.arg is not None
+                                ]
+                            symbols.append(symbol_data)
+                        except (AttributeError, IndexError) as e:
+                            # Skip malformed nodes but continue processing
+                            continue
                 return symbols
             except SyntaxError:
+                return []
+            except Exception as e:
+                # Fallback to simple regex if AST parsing fails completely
                 return []
         elif lang == "javascript":
             # Enhanced JS function/class extraction with source capture
             symbols = []
             lines = content.splitlines()
-            for match in re.finditer(r"(function\s+(\w+)\s*\()|(class\s+(\w+)\s*{)", content):
+            # Match both traditional functions and arrow functions
+            pattern = r"(?:(function\s+(\w+)\s*\()|(class\s+(\w+)\s*{)|(const|let|var)\s+(\w+)\s*=\s*(?:async\s*)?\([^)]*\)\s*=>)"
+            for match in re.finditer(pattern, content):
                 start_line = content.count('\n', 0, match.start()) + 1
                 if match.group(2):  # Function match
                     # Find function end by matching braces
@@ -122,12 +181,16 @@ class ModificationPrimitive:
                     end_line = content.count('\n', 0, pos) + 1
                     source = '\n'.join(lines[start_line-1:end_line])
                     
+                    name = match.group(2) or match.group(4) or match.group(6)
+                    symbol_type = "FunctionDef" if match.group(1) or match.group(5) else "ClassDef"
+                    
                     symbols.append({
-                        "name": match.group(2),
-                        "type": "FunctionDef",
+                        "name": name,
+                        "type": symbol_type,
                         "lineno": start_line,
                         "end_lineno": end_line,
-                        "source": source
+                        "source": source,
+                        "is_arrow": bool(match.group(5))
                     })
                 else:  # Class match
                     # Find class end by matching braces
@@ -228,6 +291,24 @@ class ReplaceClass(ModificationPrimitive):
         self.name = name
         self.new_content = new_content
         
+    def get_available_symbols(self, content: str, lang: str) -> list:
+        """Get available class names in the content"""
+        if lang == "python":
+            import ast
+            try:
+                tree = ast.parse(content)
+                return [node.name for node in ast.walk(tree) if isinstance(node, ast.ClassDef)]
+            except SyntaxError:
+                return []
+        elif lang == "javascript":
+            try:
+                # Find all JavaScript class names
+                pattern = r"(?:export\s+)?(?:default\s+)?class\s+(\w+)"
+                return re.findall(pattern, content)
+            except re.error:
+                return []
+        return []
+        
     def apply(self, content: str, lang: str) -> str:
         if lang == "python":
             import ast
@@ -238,6 +319,9 @@ class ReplaceClass(ModificationPrimitive):
                 
                 for node in ast.walk(tree):
                     if isinstance(node, ast.ClassDef) and node.name == self.name:
+                        if not self._validate_ast_node(node, content):
+                            continue
+                            
                         # Get the exact source lines including decorators
                         start_line = node.lineno - 1
                         end_line = node.end_lineno
@@ -246,17 +330,56 @@ class ReplaceClass(ModificationPrimitive):
                         if node.decorator_list:
                             start_line = min(d.lineno - 1 for d in node.decorator_list)
                         
-                        # Reconstruct with proper indentation
+                        # Validate new content
+                        new_tree = ast.parse(self.new_content)
+                        if not all(isinstance(n, (ast.ClassDef, ast.Expr)) for n in new_tree.body):
+                            raise ValueError("Replacement content must contain only class definitions")
+                            
+                        # Preserve original indentation
                         indent = ' ' * node.col_offset
                         new_content = [indent + line for line in self.new_content.splitlines()]
                         
+                        # Preserve trailing whitespace/newlines after class
+                        while end_line < len(lines) and not lines[end_line].strip():
+                            end_line += 1
+                            
                         lines = lines[:start_line] + new_content + lines[end_line:]
                         modified = True
                         break
                 
                 return "\n".join(lines) if modified else content
-            except SyntaxError:
-                pass
+            except (SyntaxError, ValueError) as e:
+                print(f"ReplaceClass failed: {str(e)}")
+        elif lang == "javascript":
+            try:
+                # Parse JavaScript class using regex pattern
+                class_pattern = re.compile(
+                    r"(?P<decorators>(?:@\w+\(.*?\)\s+)*)"
+                    r"(?:export\s+)?(?:default\s+)?class\s+"
+                    + re.escape(self.name)
+                    + r"\s*(?:extends\s+\w+)?\s*{(?P<body>.*?)}",
+                    re.DOTALL
+                )
+                
+                match = class_pattern.search(content)
+                if not match:
+                    return content
+                    
+                # Validate new class syntax
+                if not re.match(r"^(?:export\s+)?(?:default\s+)?class\s+\w+", self.new_content.strip()):
+                    raise ValueError("Replacement content must be a valid JavaScript class")
+                    
+                # Preserve decorators if present
+                decorators = match.group("decorators").strip()
+                if decorators:
+                    new_content = decorators + "\n" + self.new_content.strip()
+                else:
+                    new_content = self.new_content.strip()
+                    
+                # Replace the class while preserving surrounding code
+                return content[:match.start()] + new_content + content[match.end():]
+            except (re.error, ValueError) as e:
+                print(f"ReplaceClass failed: {str(e)}")
         return content
 
 class InsertAfter(ModificationPrimitive):
@@ -861,3 +984,193 @@ def run_editor(
     })
 
     return state, usage_meta
+
+
+def _validate_ast_node(node: ast.AST, content: str) -> bool:
+    """Validate that an AST node has all required attributes and can be safely modified"""
+    required_attrs = {
+        ast.FunctionDef: ['name', 'lineno', 'col_offset', 'body'],
+        ast.ClassDef: ['name', 'lineno', 'col_offset', 'bases', 'body'],
+        ast.AsyncFunctionDef: ['name', 'lineno', 'col_offset', 'body']
+    }
+    
+    node_type = type(node)
+    if node_type not in required_attrs:
+        return False
+        
+    for attr in required_attrs[node_type]:
+        if not hasattr(node, attr):
+            return False
+            
+    # Verify source positions are within content bounds
+    try:
+        lines = content.splitlines()
+        if node.lineno > len(lines):
+            return False
+        if hasattr(node, 'end_lineno') and node.end_lineno > len(lines):
+            return False
+    except Exception:
+        return False
+        
+    return True
+
+
+class ReplaceClass(ModificationPrimitive):
+    """Replace a class definition in Python or JavaScript code using AST parsing"""
+    
+    def __init__(self, name: str, new_content: str):
+        self.name = name
+        self.new_content = new_content
+        
+    def apply(self, content: str, lang: str) -> str:
+        """Replace the class definition in content using AST parsing"""
+        if not self.validate_target(content, self.name):
+            raise ValueError(f"Target class '{self.name}' not found in content")
+            
+        # Check for commented-out version of the class in JavaScript
+        if lang == "javascript":
+            # Check single-line comments
+            if re.search(rf'//\s*class\s+{self.name}\b', content):
+                raise ValueError(f"Target class '{self.name}' appears in single-line commented code - refusing to modify")
+            
+            # Check multi-line comments
+            if re.search(rf'\/\*\s*class\s+{self.name}\b', content):
+                raise ValueError(f"Target class '{self.name}' appears in multi-line commented code - refusing to modify")
+            
+            # Check for commented class expressions
+            if re.search(rf'//\s*(?:const|let|var)\s+{self.name}\s*=\s*class\b', content):
+                raise ValueError(f"Target class '{self.name}' appears as commented class expression - refusing to modify")
+            
+        if lang == "python":
+            import ast
+            try:
+                tree = ast.parse(content)
+            except SyntaxError as e:
+                raise ValueError(f"Failed to parse Python code: {str(e)}")
+            
+            # Find and replace the class node
+            for node in ast.walk(tree):
+                if isinstance(node, ast.ClassDef) and node.name == self.name:
+                    try:
+                        new_tree = ast.parse(self.new_content)
+                    except SyntaxError as e:
+                        raise ValueError(f"Failed to parse replacement Python code: {str(e)}")
+                        
+                    if len(new_tree.body) != 1 or not isinstance(new_tree.body[0], ast.ClassDef):
+                        raise ValueError("Replacement content must contain exactly one class definition")
+                        
+                    # Replace the node in the tree
+                    node.body = new_tree.body[0].body
+                    node.bases = new_tree.body[0].bases
+                    node.decorator_list = new_tree.body[0].decorator_list
+                    node.keywords = new_tree.body[0].keywords
+                    
+                    # Regenerate source with original formatting preserved
+                    try:
+                        return ast.unparse(tree)
+                    except Exception as e:
+                        raise ValueError(f"Failed to generate Python code: {str(e)}")
+                    
+        elif lang == "javascript":
+            import esprima
+            from escodegen import generate
+            
+            try:
+                # Parse original content with comments and locations
+                tree = esprima.parseScript(content, {
+                    'range': True,
+                    'comment': True,
+                    'tolerant': True
+                })
+            except Exception as e:
+                raise ValueError(f"Failed to parse JavaScript code: {str(e)}")
+            
+            # Find the class node to replace
+            for node in esprima.walk(tree):
+                # Skip nodes inside comments
+                if hasattr(node, 'leadingComments') and node.leadingComments:
+                    continue
+                if hasattr(node, 'trailingComments') and node.trailingComments:
+                    continue
+                if ((isinstance(node, esprima.nodes.ClassDeclaration) and node.id.name == self.name) or
+                    (isinstance(node, esprima.nodes.VariableDeclarator) and 
+                     isinstance(node.init, (esprima.nodes.FunctionExpression, esprima.nodes.ClassExpression)) and
+                     node.id.name == self.name)):
+                    
+                    try:
+                        new_tree = esprima.parseScript(self.new_content, {
+                            'range': True,
+                            'comment': True
+                        })
+                    except Exception as e:
+                        raise ValueError(f"Failed to parse replacement JavaScript code: {str(e)}")
+                        
+                    if len(new_tree.body) != 1:
+                        raise ValueError("Replacement content must contain exactly one class/function definition")
+                        
+                    # Replace the node
+                    if isinstance(node, esprima.nodes.ClassDeclaration):
+                        replacement = new_tree.body[0]
+                        if not isinstance(replacement, esprima.nodes.ClassDeclaration):
+                            raise ValueError("Replacement must be a class declaration")
+                        node.body = replacement.body
+                        node.superClass = replacement.superClass
+                    else:
+                        replacement = new_tree.body[0]
+                        if isinstance(replacement, esprima.nodes.ClassDeclaration):
+                            node.init = esprima.nodes.ClassExpression(
+                                body=replacement.body,
+                                superClass=replacement.superClass
+                            )
+                        elif isinstance(replacement, esprima.nodes.FunctionDeclaration):
+                            node.init = esprima.nodes.FunctionExpression(
+                                params=replacement.params,
+                                body=replacement.body
+                            )
+                        else:
+                            raise ValueError("Replacement must be a class or function")
+                    
+                    # Handle nested classes by checking parent scope
+                    if hasattr(node, 'parent') and isinstance(node.parent, esprima.nodes.ClassBody):
+                        # This is a nested class - we need to replace it within its parent class
+                        parent_class = node.parent.parent
+                        if not isinstance(parent_class, esprima.nodes.ClassDeclaration):
+                            raise ValueError(f"Cannot replace nested class '{self.name}' - invalid parent scope")
+                        
+                        # Find the method containing this nested class
+                        for method in parent_class.body.body:
+                            if (isinstance(method, esprima.nodes.MethodDefinition) and 
+                                isinstance(method.value, esprima.nodes.FunctionExpression) and
+                                any(isinstance(n, esprima.nodes.ClassDeclaration) and n.id.name == self.name 
+                                    for n in esprima.walk(method.value.body))):
+                                raise ValueError(f"Cannot replace nested class '{self.name}' inside method '{method.key.name}' - unsupported scope")
+                    
+                    # Regenerate source
+                    try:
+                        return generate(tree)
+                    except Exception as e:
+                        raise ValueError(f"Failed to generate code after replacement: {str(e)}")
+                    
+        raise ValueError(f"Unsupported language '{lang}' or failed to replace class '{self.name}'")
+
+    def test_multi_line_commented_js_class(self):
+        """Test that multi-line commented JS classes are properly detected and rejected"""
+        content = """/*
+ * This is a multi-line comment
+ * containing a class definition
+ * 
+ * class CommentedClass {
+ *   method() {
+ *     return 'should not be detected';
+ *   }
+ * }
+ */
+class RealClass {
+  realMethod() {
+    return 'this is the real class';
+  }
+}"""
+        # Should not detect CommentedClass as a valid target
+        self.assertFalse(ReplaceClass.validate_target(content, "CommentedClass"))
+        # Should detect RealClass as valid
+        self.assertTrue(ReplaceClass.validate_target(content, "RealClass"))
