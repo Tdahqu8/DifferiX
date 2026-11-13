@@ -1,3 +1,4 @@
+# ===================== agents/reviewer.py =====================
 import os
 import json
 import re
@@ -27,7 +28,9 @@ def resolve_sandboxed_path(target_file: str, project_dir: str = ".") -> str:
     except ValueError:
         contained = False
     if not contained:
-        raise PermissionError(f"SANDBOX VIOLATION: Reviewer path '{target_file}' escapes boundary.")
+        raise PermissionError(
+            f"SANDBOX VIOLATION: Reviewer path '{target_file}' escapes boundary."
+        )
     return target_path
 
 
@@ -53,11 +56,12 @@ def parse_reviewer_payload(raw_text: str) -> dict:
             "is_approved": False,
             "verdict": "REJECT",
             "root_cause": "Empty model output",
-            "reason": "Reviewer received empty text from LLM."
+            "reason": "Reviewer received empty text from LLM.",
         }
 
     text = raw_text.strip()
 
+    # Prefer fenced JSON
     fence_match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
     if fence_match:
         try:
@@ -65,11 +69,12 @@ def parse_reviewer_payload(raw_text: str) -> dict:
         except json.JSONDecodeError:
             pass
 
+    # Prefer outermost { ... }
     start = text.find("{")
     end = text.rfind("}")
     if start != -1 and end != -1 and end > start:
         try:
-            return json.loads(text[start:end + 1])
+            return json.loads(text[start : end + 1])
         except json.JSONDecodeError:
             pass
 
@@ -78,6 +83,7 @@ def parse_reviewer_payload(raw_text: str) -> dict:
     except json.JSONDecodeError:
         pass
 
+    # Partial extract
     if text.startswith("{") or text.startswith("```"):
         partial = _try_partial_json_extract(text)
         if "is_approved" in partial or "verdict" in partial:
@@ -88,22 +94,36 @@ def parse_reviewer_payload(raw_text: str) -> dict:
                 "_partial_parse": True,
             }
 
+    # Very strict free-text fallback: only accept if explicit positive
+    # markers are present AND no negative markers exist.
     upper_text = text.upper()
-    is_accept = any(kw in upper_text for kw in [
-        "STATUS:** APPROVED",
-        "STATUS: APPROVED",
-        "VERDICT: ACCEPT",
-        "VERDICT: APPROVED",
-        '"IS_APPROVED": TRUE',
-        "\"VERDICT\": \"ACCEPT\""
-    ]) or (
-        "ACCEPT" in upper_text
-        and "REJECT" not in upper_text
-        and "DO NOT ACCEPT" not in upper_text
-        and "NOT ACCEPT" not in upper_text
-        and "CANNOT ACCEPT" not in upper_text
-        and "REFUSE" not in upper_text
+    negative = any(
+        kw in upper_text
+        for kw in (
+            "REJECT",
+            "NOT ACCEPT",
+            "DO NOT ACCEPT",
+            "CANNOT ACCEPT",
+            "REFUSE",
+            "FAILED",
+            "BROKEN",
+            "SYNTAX ERROR",
+            "BUILD_FAILED",
+        )
     )
+    positive = any(
+        kw in upper_text
+        for kw in (
+            "STATUS:** APPROVED",
+            "STATUS: APPROVED",
+            "VERDICT: ACCEPT",
+            "VERDICT: APPROVED",
+            '"IS_APPROVED": TRUE',
+            '"VERDICT": "ACCEPT"',
+        )
+    )
+
+    is_accept = positive and not negative
 
     reason_match = re.search(r"\*\*Analysis:\*\*\s*(.+)", text, re.DOTALL)
     clean_reason = reason_match.group(1).strip() if reason_match else text[:300]
@@ -111,22 +131,48 @@ def parse_reviewer_payload(raw_text: str) -> dict:
     return {
         "is_approved": is_accept,
         "verdict": "ACCEPT" if is_accept else "REJECT",
-        "root_cause": "Parsed from Markdown text response." if is_accept else "Reviewer rejected changes.",
-        "reason": clean_reason
+        "root_cause": (
+            "Parsed from Markdown text response."
+            if is_accept
+            else "Reviewer rejected changes."
+        ),
+        "reason": clean_reason,
     }
 
-def run_reviewer(state, project_dir=".", session_context="", coherence_report="", visual_context=""):
-    """
-    Run the reviewer agent.
 
-    Uses Tiered Context Assembly to bound token usage. The reviewed code
-    is rendered as a unified diff when possible (10-30x smaller than the
-    full file for small edits), falling back to a sliced view when no
-    prior content is available (new files).
+def _compiler_indicates_failure(compiler_log: str) -> bool:
+    """Machine check: does the compiler log clearly signal a failure?"""
+    if not compiler_log:
+        return False
+    upper = compiler_log.upper()
+    failure_markers = (
+        "BUILD_FAILED",
+        "SYNTAX ERROR",
+        "JS SYNTAX",
+        "TYPESCRIPT",
+        "UNBALANCED",
+        "UNEXPECTED TOKEN",
+        "UNEXPECTED CLOSING",
+        "MISMATCHED",
+        "UNCLOSED",
+        "PARSE ERROR",
+        "SYNTAXERROR",
+    )
+    # SUCCESS (SKIPPED) is not a failure
+    if "BUILD_FAILED" in upper:
+        return True
+    if any(m in upper for m in failure_markers) and "SUCCESS" not in upper[:40]:
+        return True
+    return False
 
-    Also fixes a stray `task_spec=...` no-op assignment that previously
-    appeared after the safe_chat_completion call.
-    """
+
+def run_reviewer(
+    state,
+    project_dir=".",
+    session_context="",
+    coherence_report="",
+    visual_context="",
+):
     from tools.context_assembler import (
         ContextBundle,
         Tier,
@@ -137,18 +183,22 @@ def run_reviewer(state, project_dir=".", session_context="", coherence_report=""
         render_code_diff,
     )
 
-    # ---- Lessons (only when session_context is missing) ----
     if session_context:
         promoted_lessons = ""
     else:
         from tools.lesson_manager import get_ranked_lessons_for_role
 
-        retrieval_query = " ".join(filter(None, [
-            str(state.get("active_subtask") or ""),
-            str(state.get("research_analysis") or ""),
-            str(state.get("goal") or ""),
-            str(state.get("target_file") or ""),
-        ])).strip() or "code review"
+        retrieval_query = " ".join(
+            filter(
+                None,
+                [
+                    str(state.get("active_subtask") or ""),
+                    str(state.get("research_analysis") or ""),
+                    str(state.get("goal") or ""),
+                    str(state.get("target_file") or ""),
+                ],
+            )
+        ).strip() or "code review"
 
         _, lessons_block, _ = get_ranked_lessons_for_role(
             role="reviewer",
@@ -160,7 +210,6 @@ def run_reviewer(state, project_dir=".", session_context="", coherence_report=""
     iteration_logs = state.get("iteration_logs") or state.get("compiler_output", "") or ""
     skill_prompt = get_combined_agent_skill("reviewer", project_dir)
 
-    # System prompt — STRICT JSON only
     coherence_rule = ""
     if coherence_report:
         coherence_rule = (
@@ -171,6 +220,16 @@ def run_reviewer(state, project_dir=".", session_context="", coherence_report=""
 
     system_prompt = (
         f"{skill_prompt}\n\n"
+        f"REVIEW PRIORITY GUIDELINES:\n"
+        f"- CRITICAL (blocking): broken syntax, missing files, broken cross-file "
+        f"references, security violations, dead code, TODO stubs, "
+        f"BUILD_FAILED / JS SYNTAX ERROR / unbalanced braces.\n"
+        f"- WARNING (non-blocking): missing prefers-reduced-motion guards, "
+        f"style inconsistencies, minor accessibility gaps. Mention them in "
+        f"`reason` but do NOT set is_approved=false for these alone.\n"
+        f"- Only set is_approved=false if there is a CRITICAL issue.\n"
+        f"- If the EXECUTION LOGS or compiler output contain BUILD_FAILED, "
+        f"SYNTAX ERROR, or JS SYNTAX — you MUST reject.\n\n"
         f"CRITICAL REQUIREMENT:\n"
         f"You MUST respond ONLY with a raw, valid JSON object matching this "
         f"schema:\n"
@@ -189,11 +248,13 @@ def run_reviewer(state, project_dir=".", session_context="", coherence_report=""
     generated_data = state.get("generated_code")
     code_content = (
         generated_data.get("code")
-        if isinstance(generated_data, dict) else generated_data
+        if isinstance(generated_data, dict)
+        else generated_data
     )
     apply_result = (
         generated_data.get("apply_result")
-        if isinstance(generated_data, dict) else None
+        if isinstance(generated_data, dict)
+        else None
     )
 
     if target_file and not code_content:
@@ -205,7 +266,6 @@ def run_reviewer(state, project_dir=".", session_context="", coherence_report=""
         except PermissionError as pe:
             code_content = f"SANDBOX REJECTION: {pe}"
 
-    # Pruned state — NO code here (code lives in T2)
     pruned_state = {
         "iteration": state.get("iteration_count", 0),
         "active_subtask": state.get("active_subtask", ""),
@@ -222,20 +282,14 @@ def run_reviewer(state, project_dir=".", session_context="", coherence_report=""
     if injected_ids:
         pruned_state["injected_lesson_node_ids"] = list(injected_ids)
 
-    # ---- Build TCA bundle ----
     bundle = ContextBundle()
-
-    # T0
     bundle.add_text(Tier.T0_STATIC, "skills", system_prompt)
-
-    # T1: pruned state (spec, never cut)
     bundle.add_text(
         Tier.T1_ACTION_CORE,
         "state",
         f"=== STATE TO REVIEW ===\n{json.dumps(pruned_state, ensure_ascii=False)}",
     )
 
-    # T2: the code under review — DIFF if possible, else sliced code
     if code_content:
         old_code = state.get("old_code_backup", "") or ""
         diff_view = render_code_diff(old_code, code_content, target_file or "file")
@@ -243,30 +297,35 @@ def run_reviewer(state, project_dir=".", session_context="", coherence_report=""
         if diff_view:
             bundle.add_text(Tier.T2_TARGET_SLICE, "diff", diff_view)
         else:
-            hints = " ".join(filter(None, [
-                str(state.get("active_subtask") or ""),
-                str(state.get("research_analysis") or "")[:400],
-            ]))
+            hints = " ".join(
+                filter(
+                    None,
+                    [
+                        str(state.get("active_subtask") or ""),
+                        str(state.get("research_analysis") or "")[:400],
+                    ],
+                )
+            )
             sliced = smart_slice_code(
-                code_content, target_file or "file", max_lines=200, hints=hints
+                code_content, target_file or "file", max_lines=200, hints=hints,
             )
             tightly = smart_slice_code(
-                code_content, target_file or "file", max_lines=60, hints=hints
+                code_content, target_file or "file", max_lines=60, hints=hints,
             )
-            bundle.add(TierItem(
-                tier=Tier.T2_TARGET_SLICE,
-                key="code",
-                content=(
-                    f"=== CODE TO REVIEW ({target_file}) ===\n{sliced}"
-                ),
-                fallback_content=(
-                    f"=== CODE TO REVIEW ({target_file}) [HEAVILY TRUNCATED] ===\n{tightly}"
-                    if tightly != sliced else ""
-                ),
-                optional=False,
-            ))
+            bundle.add(
+                TierItem(
+                    tier=Tier.T2_TARGET_SLICE,
+                    key="code",
+                    content=f"=== CODE TO REVIEW ({target_file}) ===\n{sliced}",
+                    fallback_content=(
+                        f"=== CODE TO REVIEW ({target_file}) [HEAVILY TRUNCATED] ===\n{tightly}"
+                        if tightly != sliced
+                        else ""
+                    ),
+                    optional=False,
+                )
+            )
 
-    # T3: coherence (blocking) > visual > session
     if coherence_report:
         bundle.add_text(
             Tier.T3_INTERFACE,
@@ -283,7 +342,6 @@ def run_reviewer(state, project_dir=".", session_context="", coherence_report=""
     if session_context:
         bundle.add_text(Tier.T3_INTERFACE, "session", session_context)
 
-    # T4: lessons
     if promoted_lessons:
         bundle.add_text(
             Tier.T4_ENRICHMENT,
@@ -291,7 +349,6 @@ def run_reviewer(state, project_dir=".", session_context="", coherence_report=""
             f"=== RELEVANT LESSONS (A-SCORE RANKED) ===\n{promoted_lessons}",
         )
 
-    # T5: deduped logs
     if iteration_logs.strip():
         deduped = dedupe_logs(iteration_logs, max_errors=5)
         if deduped:
@@ -302,7 +359,6 @@ def run_reviewer(state, project_dir=".", session_context="", coherence_report=""
                 optional=True,
             )
 
-    # ---- Assemble ----
     budget = getattr(config, "TOKEN_BUDGET_REVIEWER", 14000)
     assembled = ContextAssembler(
         budget=budget,
@@ -315,7 +371,6 @@ def run_reviewer(state, project_dir=".", session_context="", coherence_report=""
         except Exception:
             pass
 
-    # ---- Call LLM ----
     active_model = get_reviewer_model()
 
     response, provider = safe_chat_completion(
@@ -343,6 +398,17 @@ def run_reviewer(state, project_dir=".", session_context="", coherence_report=""
     else:
         is_approved = str(result.get("verdict", "")).upper() == "ACCEPT"
 
+    # ------------------------------------------------------------------
+    # MACHINE OVERRIDE: never trust LLM ACCEPT when compiler already failed
+    # ------------------------------------------------------------------
+    if is_approved and _compiler_indicates_failure(compiler_log):
+        is_approved = False
+        result["reason"] = (
+            "Machine override: compiler log indicates syntax/build failure. "
+            + (result.get("reason") or "")
+        )[:150]
+        result["_machine_override"] = True
+
     result["is_approved"] = is_approved
     result["verdict"] = "ACCEPT" if is_approved else "REJECT"
 
@@ -350,7 +416,11 @@ def run_reviewer(state, project_dir=".", session_context="", coherence_report=""
         result["reason"] = (
             result.get("root_cause")
             or result.get("fix_instruction")
-            or ("Edits approved successfully." if is_approved else "Edits rejected by reviewer.")
+            or (
+                "Edits approved successfully."
+                if is_approved
+                else "Edits rejected by reviewer."
+            )
         )
 
     if not is_approved and result.get("create_observation"):
@@ -363,12 +433,16 @@ def run_reviewer(state, project_dir=".", session_context="", coherence_report=""
     state["review_result"] = result
 
     usage = getattr(response, "usage", None)
-    usage_meta = type("Meta", (), {
-        "prompt_token_count": getattr(usage, "prompt_tokens", 0) or 0,
-        "candidates_token_count": getattr(usage, "completion_tokens", 0) or 0,
-        "raw_response": result_text,
-        "provider": provider,
-        "model_id": active_model,
-    })
+    usage_meta = type(
+        "Meta",
+        (),
+        {
+            "prompt_token_count": getattr(usage, "prompt_tokens", 0) or 0,
+            "candidates_token_count": getattr(usage, "completion_tokens", 0) or 0,
+            "raw_response": result_text,
+            "provider": provider,
+            "model_id": active_model,
+        },
+    )
 
     return state, usage_meta

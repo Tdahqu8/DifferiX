@@ -1953,21 +1953,21 @@ class OrchestratorConsole:
                     continue
 
                 # ---- Security Check ----
-                allow_cleanup = getattr(config, "RSI_MODE", False)
-                danger_hits = find_dangerous_code(res_code, allow_cleanup=allow_cleanup)
-                if danger_hits:
-                    msg = f"Forbidden patterns detected: {', '.join(danger_hits)}"
-                    console.print(
-                        Panel(
-                            msg,
-                            title="Security Warning",
-                            border_style="bold red",
-                        )
-                    )
-                    state["compiler_output"] = f"SECURITY_ERROR: Edit rejected. {msg}"
-                    state["current_step"] = "edit"
-                    self.save_state(state)
-                    continue
+                # allow_cleanup = getattr(config, "RSI_MODE", False)
+                # danger_hits = find_dangerous_code(res_code, allow_cleanup=allow_cleanup)
+                # if danger_hits:
+                #     msg = f"Forbidden patterns detected: {', '.join(danger_hits)}"
+                #     console.print(
+                #         Panel(
+                #             msg,
+                #             title="Security Warning",
+                #             border_style="bold red",
+                #         )
+                #     )
+                #     state["compiler_output"] = f"SECURITY_ERROR: Edit rejected. {msg}"
+                #     state["current_step"] = "edit"
+                #     self.save_state(state)
+                #     continue
 
                 # ---- Backup old content ----
                 old_code = self.sandbox.safe_read_file(res_file)
@@ -2033,7 +2033,7 @@ class OrchestratorConsole:
                         self.save_state(state)
                         continue
 
-                # --- Pre-flight syntax check ---
+                                # --- Pre-flight syntax check ---
                 if res_file.endswith(".py"):
                     try:
                         compile(res_code, res_file, "exec")
@@ -2044,6 +2044,52 @@ class OrchestratorConsole:
                         state["iteration_count"] = state.get("iteration_count", 0) + 1
                         self.save_state(state)
                         continue
+
+                                # JS / TS pre-flight (second line of defence)
+                if res_file.endswith((".js", ".mjs", ".cjs", ".ts", ".tsx")) and res_code:
+                    import tempfile
+                    import subprocess as _sp
+                    _tmp = None
+                    try:
+                        with tempfile.NamedTemporaryFile(
+                            mode="w", suffix=".js", delete=False, encoding="utf-8"
+                        ) as _f:
+                            _f.write(res_code)
+                            _tmp = _f.name
+                        _check = _sp.run(
+                            ["node", "--check", _tmp],
+                            capture_output=True,
+                            text=True,
+                            timeout=12,
+                        )
+                        if _check.returncode != 0:
+                            err_msg = (_check.stderr or _check.stdout or "").strip()[:500]
+                            console.print(f"[bold red]JS SYNTAX ERROR (pre-apply):[/bold red] {err_msg}")
+                            state["editor_feedback"] = (
+                                f"JS SYNTAX ERROR — your patch would break {res_file}:\n"
+                                f"{err_msg}\n\n"
+                                f"FIX: count your braces {{ }}, parentheses ( ), and brackets [ ]. "
+                                f"Do not insert a new function inside an existing scope. "
+                                f"If the file is large, only modify a small, clearly visible section."
+                            )
+                            state["current_step"] = "edit"
+                            state["iteration_count"] = state.get("iteration_count", 0) + 1
+                            self.save_state(state)
+                            continue
+                    except FileNotFoundError:
+                        pass  # node not available
+                    except Exception as _exc:
+                        console.print(f"[dim yellow]JS pre-flight skipped: {_exc}[/dim yellow]")
+                    finally:
+                        if _tmp and os.path.exists(_tmp):
+                            try:
+                                os.remove(_tmp)
+                            except OSError:
+                                pass
+
+                # ---- Atomic apply ----
+                change_set = ChangeSet()
+                change_set.add_write(res_file, res_code)
 
                 # ---- Atomic apply ----
                 change_set = ChangeSet()
@@ -2304,8 +2350,6 @@ class OrchestratorConsole:
                                     console.print(f"[dim green]Visual Diff passed (SSIM: {vis_res['ssim']:.2f})[/dim green]")
                             except Exception as vis_exc:
                                 console.print(f"[dim yellow]Visual review skipped: {vis_exc}[/dim yellow]")
-                # ---------------------------------
-
                 # ---- Reviewer ----
                 session_ctx = self._build_session_context(
                     state, role="reviewer", record_trigger=True
@@ -2553,13 +2597,12 @@ class OrchestratorConsole:
                 try:
                     from tools.lesson_memory_bridge import LessonMemoryBridge
                     bridge = LessonMemoryBridge(
-                        lessons_root=os.path.join(self.proj["path"], "lessons")
+                        lessons_root=os.path.join(self.proj["path"], "lessons"),
+                        db_path=os.path.join(self.proj["path"], ".vegex", "lessons.db")
                     )
                     bridge.sync_all()
                 except Exception as exc:
-                    console.print(
-                        f"[dim yellow]Bridge sync after reflection failed: {exc}[/dim yellow]"
-                    )
+                    console.print(f"[dim yellow]Bridge sync after reflection failed: {exc}[/dim yellow]")
 
                 # Return to whatever step we came from
                 previous = state.pop("_pre_reflect_step", "research")

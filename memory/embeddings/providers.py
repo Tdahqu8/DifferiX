@@ -158,8 +158,8 @@ class OpenRouterEmbeddingProvider(BaseEmbeddingProvider):
                 default_headers={
                     # OpenRouter requires these for rate-limit attribution.
                     # They can be any string; the values below identify DifferiX.
-                    "HTTP-Referer": "https://github.com/Tdahqu8/DifferiX,
-                    "X-Title": "DifferiX",
+                    "HTTP-Referer": "https://github.com/Tdahqu8/DifferiX",
+                    "X-Title": "VegeX",
                 },
             )
         return self._client

@@ -444,7 +444,7 @@ def _smart_slice_python(
 # Code slicing for T2
 # ---------------------------------------------------------------------------
 _BACKEND_EXTS = {"py", "pyi", "rb", "go", "rs", "java", "kt", "c", "cpp", "h", "hpp"}
-_FRONTEND_EXTS = {"html", "htm", "css", "scss"}
+_FRONTEND_EXTS = {"html", "htm", "css", "scss", "js", "mjs", "cjs", "ts", "tsx", "jsx"}
 
 
 def _render_line_slice(code: str, target_file: str, max_lines: int = 150) -> str:
@@ -469,10 +469,13 @@ def _render_line_slice(code: str, target_file: str, max_lines: int = 150) -> str
     ext = target_file.rsplit(".", 1)[-1].lower() if "." in target_file else ""
 
     if ext in _FRONTEND_EXTS:
-        head_lines = max_lines - 30
-        tail_lines = 30
+        # Keep more of the tail — closing tags / final functions matter a lot
+        head_lines = max_lines - 40
+        tail_lines = 40
         if ext in ("html", "htm"):
             marker = "<!--"
+        elif ext in ("js", "mjs", "cjs", "ts", "tsx", "jsx"):
+            marker = "//"
         else:
             marker = "/*"
     else:
