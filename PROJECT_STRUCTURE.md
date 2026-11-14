@@ -1,6 +1,6 @@
 # Project Structure
 
-Generated on: 2026-11-13T14:42:42Z
+Generated on: 2026-11-14T13:21:42Z
 
 ```
 ├── .env.example
@@ -89,12 +89,14 @@ Generated on: 2026-11-13T14:42:42Z
 ├── palettes/
 │   ├── midnight-amber.css
 │   └── thecalcook-com.css
+├── patch.py
 ├── pyproject.toml
 ├── run
 ├── run_tests.sh
 ├── skills/
 │   ├── csharp_gamedev.md
 │   ├── editor_rules.md
+│   ├── editor_rules.md.bak.1794582607
 │   ├── frontend_design.md
 │   ├── python.md
 │   ├── researcher_rules.md
@@ -117,20 +119,29 @@ Generated on: 2026-11-13T14:42:42Z
 │   ├── conftest.py
 │   ├── my_test.py
 │   ├── tbg.py
+│   ├── test_code_tools.py
 │   ├── test_isolation.py
 │   ├── test_reflection.py
 │   ├── test_verification_firewall.py
 │   ├── test_visual_capture.py
 │   ├── test_visual_diff.py
 │   └── tvf.py
+├── tmp/
+│   ├── patch_code_tools.txt
+│   ├── patch_editor.txt
+│   └── patch_rules.txt
 ├── tools/
+│   ├── __init__.py
 │   ├── agents_chat.py
 │   ├── asset_extractor.py
 │   ├── asset_manager.py
+│   ├── ast_ops.py
+│   ├── ast_slicer.py
 │   ├── atomic_changeset.py
 │   ├── backup_manager.py
 │   ├── changelog_engine.py
 │   ├── code_tools.py
+│   ├── code_tools.py.bak.1794582606
 │   ├── coherence_checker.py
 │   ├── compiler.py
 │   ├── component_normalizer.py
@@ -152,6 +163,7 @@ Generated on: 2026-11-13T14:42:42Z
 │   ├── project_structure.py
 │   ├── reasoning_logger.py
 │   ├── reflection.py
+│   ├── safety_guards.py
 │   ├── sandbox_utils.py
 │   ├── security/
 │   │   ├── __init__.py
@@ -164,6 +176,7 @@ Generated on: 2026-11-13T14:42:42Z
 │   ├── state_manager.py
 │   ├── structure_index.py
 │   ├── test_schema_consistency.py
+│   ├── tool_ops.py
 │   ├── verification_firewall.py
 │   ├── visual_capture.py
 │   ├── visual_diff.py

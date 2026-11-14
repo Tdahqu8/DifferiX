@@ -225,7 +225,14 @@ def run_researcher(
     "sequential steps on the SAME target_file. Later steps will append to the file.\n"
     "5. `provides`/`consumes`: Use these to declare cross-file dependencies (e.g., [\"html:.hero-title\", \"file:script.js\"]).\n"
     "6. NEVER assign read-only tasks (e.g., 'Extract class names', 'Analyze structure') to the editor. "
-    "The editor ONLY writes code. Do all analysis yourself and include the results directly in the step description.\n\n"
+    "The editor ONLY writes code. Do all analysis yourself and include the results directly in the step description.\n"
+    "7. MANDATORY FULL-STACK RULE: If the task is to build a website, your plan MUST include separate steps for: "
+    "index.html, styles.css, script.js, llms.txt (GEO), and a final performance optimization pass. "
+    "Never finish a plan until all these files are created or updated.\n\n"
+    "### CRITICAL TOOL USAGE RULE\n"
+    "'replace_function', 'insert_code', and 'SEARCH/REPLACE' are DifferiX JSON AST tools, NOT Python code. "
+    "If the user asks to 'use replace_function', your plan MUST simply be: 'Modify the <function_name> function in <target_file>'. "
+    "NEVER plan a step to write a Python function literally named replace_function.\n\n"
     "### WEB STYLES (If building a UI)\n"
     "Set `web_style` to EXACTLY one of these, or empty string if not a web task:\n"
     "- 'styles/style_3d_webgl' (space, gaming, 3D)\n"
@@ -237,7 +244,7 @@ def run_researcher(
     "If the task is to build a website, you MUST append TWO final steps to the plan:\n"
     "   - Step N: 'Add CSS media queries for responsiveness and micro-interaction transitions (hover states, focus rings)' targeting 'styles.css'.\n"
     "   - Step N+1: 'Add JavaScript for custom cursor tracking, IntersectionObserver scroll-reveals, and dynamic element interactions' targeting 'script.js'.\n\n"
-        "### GEO & AI-SEO RULE\n"
+    "### GEO & AI-SEO RULE\n"
     "If the task is to build a website, you MUST also append these steps to the plan:\n"
     "   - Step N: 'Generate llms.txt in the project root with site summary and key links' targeting 'llms.txt'.\n"
     "   - Step N+1: 'Inject JSON-LD Schema.org (WebSite or Organization) into the <head> of index.html' targeting 'index.html'.\n\n"
@@ -260,11 +267,8 @@ def run_researcher(
     '      "status": "pending"\n'
     "    }\n"
     "  ]\n"
-        "7. MANDATORY FULL-STACK RULE: If the task is to build a website, your plan MUST include separate steps for: "
-    "index.html, styles.css, script.js, llms.txt (GEO), and a final performance optimization pass. "
-    "Never finish a plan until all these files are created or updated.\n\n"
     "}"
-    )
+)
     
 
     user_input_parts = []

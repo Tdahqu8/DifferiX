@@ -13,13 +13,14 @@ fully-rolled-back. On POSIX we can't rename N files in a single syscall,
 but we can:
   1. Stage all content to .differix/staging/<uuid>/
   2. Snapshot backups of every file to be touched
-  3. Apply replacements one by one
+  3. Apply replacements one by one (SKIPPING idempotent writes)
   4. On any failure, restore from the backups
 
-That gives "best-effort atomicity" — the window between rename #1 and
-rename #N is microseconds, no I/O, no LLM calls. Not bulletproof against
-SIGKILL at the exact wrong moment, but eliminates the failure mode that
-actually hurt.
+Idempotency (Phase 1.2):
+  If `content == existing content`, we skip the write, append to `skipped`,
+  and never touch disk. This lets the pipeline distinguish
+  "no-op" from "wrote something new" and prevents infinite retry loops
+  when the LLM generates byte-identical code.
 """
 
 from __future__ import annotations
@@ -63,6 +64,7 @@ class ChangeOp:
 class ApplyReport:
     ok: bool = False
     applied: List[str] = field(default_factory=list)
+    skipped: List[str] = field(default_factory=list)  # Phase 1.2: idempotent no-ops
     rolled_back: List[str] = field(default_factory=list)
     error: Optional[str] = None
     elapsed_ms: float = 0.0
@@ -71,6 +73,7 @@ class ApplyReport:
         return {
             "ok": self.ok,
             "applied": list(self.applied),
+            "skipped": list(self.skipped),
             "rolled_back": list(self.rolled_back),
             "error": self.error,
             "elapsed_ms": round(self.elapsed_ms, 3),
@@ -140,7 +143,7 @@ class ChangeSet:
             if op.kind == "write":
                 result[op.path] = op.content or ""
             else:  # delete
-                result[op.path] = ""  # validators treat empty file as no-op
+                result[op.path] = ""
         return result
 
     # ------------------------------------------------------------------ #
@@ -187,10 +190,27 @@ class ChangeSet:
             report.elapsed_ms = (time.perf_counter() - t0) * 1000.0
             return report
 
+        # Phase 1.2: idempotency — skip writes that match existing content
+        ops_to_apply: List[ChangeOp] = []
+        for op in self.ops:
+            if op.kind == "write":
+                existing = backups.get(op.path)
+                if existing is not None and existing == op.content:
+                    report.skipped.append(op.path)
+                    continue
+            ops_to_apply.append(op)
+
+        if not ops_to_apply:
+            # All ops were idempotent no-ops; nothing to write
+            _safe_rmtree(staging_dir)
+            report.ok = True
+            report.elapsed_ms = (time.perf_counter() - t0) * 1000.0
+            return report
+
         # stage all new content to disk first
         staged_paths: Dict[str, Path] = {}
         try:
-            for op in self.ops:
+            for op in ops_to_apply:
                 if op.kind != "write":
                     continue
                 stage_target = staging_dir / op.path
@@ -206,7 +226,7 @@ class ChangeSet:
         # now do the renames in rapid succession
         applied: List[str] = []
         try:
-            for op in self.ops:
+            for op in ops_to_apply:
                 target = root / op.path
                 if op.kind == "write":
                     target.parent.mkdir(parents=True, exist_ok=True)
@@ -226,7 +246,6 @@ class ChangeSet:
                 try:
                     target = root / path
                     if backup is None:
-                        # didn't exist before → delete what we wrote
                         try:
                             target.unlink()
                         except FileNotFoundError:

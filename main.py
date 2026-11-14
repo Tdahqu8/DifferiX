@@ -79,6 +79,14 @@ from tools.lesson_manager import (
     record_lesson_violation,
     lesson_memory_stats,
 )
+
+# === PATCH A: LessonMemoryBridge optional import ===
+try:
+    from tools.lesson_memory_bridge import LessonMemoryBridge
+except ImportError:
+    LessonMemoryBridge = None
+# === END PATCH A ===
+
 from tools.atomic_changeset import ChangeSet
 from tools.contract_validator import ContractValidator
 from tools.session_adr import SessionADR, build_entry as build_adr_entry
@@ -295,6 +303,11 @@ class OrchestratorConsole:
             self.validator = ContractValidator(self.proj["path"])
             self._guard = DriftGuard(self.proj["path"])
             self.plugin_mgr = PluginManager(self.proj["path"])
+            # === PATCH B: init BehaviorGuard in __init__ ===
+            # Phase 3: initialize BehaviorGuard here so it's available everywhere
+            # (previously only set in run_cli, causing AttributeError in REPL mode)
+            self.behavior_guard = BehaviorGuard()
+            # === END PATCH B ===
         else:
             self.sandbox = None
             self.logger = None
@@ -303,6 +316,9 @@ class OrchestratorConsole:
             self.validator = None
             self._guard = None
             self.plugin_mgr = None
+            # === PATCH B: fallback branch ===
+            self.behavior_guard = BehaviorGuard()
+            # === END PATCH B ===
 
     # ------------------------------------------------------------------ #
     # State I/O
@@ -1427,6 +1443,11 @@ class OrchestratorConsole:
         if self._guard is None:
             self._guard = DriftGuard(self.proj["path"])
 
+        # === PATCH F: fallback safety for behavior_guard ===
+        if getattr(self, "behavior_guard", None) is None:
+            self.behavior_guard = BehaviorGuard()
+        # === END PATCH F ===
+
         if not self.ensure_active_task(prompt_arg):
             return
 
@@ -1731,29 +1752,8 @@ class OrchestratorConsole:
                             related_context=related_ctx,
                         )
                     self.update_costs(meta, agent_name="editor")
-                    # Detect if the plan asks for function replacement
-                    plan_mentions_function = "replace_function" in str(state.get("active_subtask") or "")
-                    if plan_mentions_function and target_file.endswith(".py"):
-                        # Find the function name from the subtask
-                        import re as _re
-                        m = _re.search(r"function[\s:]+['\"]?(\w+)", str(state.get("active_subtask") or ""))
-                        if m:
-                            func_name = m.group(1)
-                            # Extract full source of that function
-                            try:
-                                import ast as _ast
-                                tree = _ast.parse(target_code)
-                                for node in _tree.body:
-                                    if isinstance(node, _ast.FunctionDef) and node.name == func_name:
-                                        full_func_src = _ast.get_source_segment(target_code, node)
-                                        bundle.add_text(
-                                            Tier.T1_ACTION_CORE,
-                                            "full_function_under_edit",
-                                            f"=== FULL SOURCE OF '{func_name}' (you MUST preserve all this logic) ===\n```python\n{full_func_src}\n```"
-                                        )
-                                        break
-                            except Exception:
-                                pass
+                    # === PATCH C: broken plan_mentions_function block removed ===
+                    # (логика перенесена в editor.py::run_editor)
                 # === BEHAVIOR GUARD CHECK ===
                     # Pass project_root to state so guard can check paths
                     state["project_root"] = self.proj["path"]
@@ -1975,6 +1975,23 @@ class OrchestratorConsole:
                     self.save_state(state)
                     continue
 
+                # === PATCH G: diagnostic mode handling ===
+                # ---- Diagnostic mode handling (lint/check_syntax/etc.) ----
+                apply_mode = (raw_generated.get("apply_result") or {}).get("mode", "") if isinstance(raw_generated, dict) else ""
+                if apply_mode.startswith("diagnostic_"):
+                    diag = (raw_generated.get("apply_result") or {}).get("diagnostic", {})
+                    console.print(f"[cyan]Diagnostic ({apply_mode}):[/cyan]")
+                    console.print(json.dumps(diag, indent=2, ensure_ascii=False)[:1200])
+                    state["editor_feedback"] = (
+                        f"DIAGNOSTIC ({apply_mode}):\n"
+                        f"{json.dumps(diag, ensure_ascii=False)[:600]}"
+                    )
+                    state["current_step"] = "edit"
+                    state["iteration_count"] = state.get("iteration_count", 0) + 1
+                    self.save_state(state)
+                    continue
+                # === END PATCH G ===
+
                 # ---- Security Check ----
                 # allow_cleanup = getattr(config, "RSI_MODE", False)
                 # danger_hits = find_dangerous_code(res_code, allow_cleanup=allow_cleanup)
@@ -2110,31 +2127,29 @@ class OrchestratorConsole:
                             except OSError:
                                 pass
 
-                # ---- Atomic apply ----
-                change_set = ChangeSet()
-                change_set.add_write(res_file, res_code)
-
-                # ---- Atomic apply ----
-                change_set = ChangeSet()
-                change_set.add_write(res_file, res_code)
-                # VERIFICATION FIREWALL: verify the file actually changed on disk
+                # === PATCH D: atomic apply with idempotency + verification firewall + RSI gate ===
+                # ---- VERIFICATION FIREWALL: capture pre-apply hash ----
                 from tools.security.verification_firewall import (
                     fs_hash, verify_file_changed,
                 )
 
                 abs_target = os.path.join(self.proj["path"], res_file)
                 pre_apply_hash = fs_hash(abs_target)
-                                # --- RSI Critical File Gate (Phase 1.3) ---
+
+                # --- RSI Critical File Gate (Phase 1.3) ---
                 is_rsi = getattr(config, "RSI_MODE", False)
                 is_critical = res_file in getattr(config, "RSI_CRITICAL_FILES", set())
-                
+
                 if is_rsi and is_critical:
-                    pending_dir = os.path.join(self.proj["path"], ".differix", "pending_critical_changes")
+                    pending_dir = os.path.join(
+                        self.proj["path"], ".differix", "pending_critical_changes"
+                    )
                     os.makedirs(pending_dir, exist_ok=True)
                     safe_filename = res_file.replace("/", "_").replace("\\", "_")
-                    pending_file = os.path.join(pending_dir, f"{safe_filename}_{int(time.time())}.patch")
+                    pending_file = os.path.join(
+                        pending_dir, f"{safe_filename}_{int(time.time())}.patch"
+                    )
 
-                    # Save the proposed change to disk for review
                     with open(pending_file, "w", encoding="utf-8") as f:
                         f.write(res_code)
 
@@ -2146,62 +2161,124 @@ class OrchestratorConsole:
                         f"and move to the next step.",
                         border_style="yellow",
                     ))
-                    
+
                     state["editor_feedback"] = (
                         f"CHANGE GATED: Modifications to '{res_file}' require human approval. "
                         f"Your code was saved to pending review, but not applied to the live file. "
                         f"Proceed with your next subtask or finish."
                     )
-                    
-                    # Mark step completed so the pipeline doesn't loop endlessly
+
                     self._mark_step_completed(state, res_file)
-                    
-                    # Check if there are more pending steps
-                    pending = [s for s in state.get("plan", []) if s.get("status") == "pending"]
+                    pending = [
+                        s for s in state.get("plan", [])
+                        if isinstance(s, dict) and s.get("status") == "pending"
+                    ]
                     if pending:
                         state["current_step"] = "research"
                     else:
                         state["current_step"] = "done"
                         state["status"] = "completed"
-                        
-                    self.save_state(state)
-                    continue  # Skip actual application
-                # ------------------------------------------
 
-                # ---- Atomic apply ----
+                    self.save_state(state)
+                    continue
+
+                # ---- Atomic apply (idempotent — skips if content identical) ----
                 change_set = ChangeSet()
                 change_set.add_write(res_file, res_code)
                 apply_report = change_set.apply(self.proj["path"])
 
                 if apply_report.ok:
-                    changed, post_hash = verify_file_changed(abs_target, pre_apply_hash)
-                    if not changed:
+                    # ---- NEW: distinguish no-op (idempotent) from real writes ----
+                    if not apply_report.applied and apply_report.skipped:
+                        # Agent wrote identical content → no progress
+                        no_op_reason = (
+                            f"NO_OP: agent produced identical content for {res_file}. "
+                            f"No file change was made."
+                        )
+                        if self._check_rejection_loop(state, no_op_reason):
+                            console.print(Panel(
+                                "[bold red]CIRCUIT BREAKER: 3 identical no-op writes[/bold red]\n\n"
+                                "The agent keeps writing the SAME content. "
+                                "This is a confirmed loop. Halting to prevent token waste.",
+                                border_style="bold red",
+                            ))
+                            state["current_step"] = "done"
+                            state["status"] = "failed"
+                            self.save_state(state)
+                            break
+
                         console.print(
-                            f"[bold red]⚠ SECURITY: apply_report.ok=True but file "
-                            f"did not change on disk. Trusting fs over agent.[/bold red]"
+                            f"[yellow]NO-OP DETECTED: {res_file} unchanged "
+                            f"(identical content). Asking agent for a different approach.[/yellow]"
                         )
                         state["editor_feedback"] = (
-                            "Filesystem verification failed: the file did not "
-                            "change after apply. The atomic changeset may be corrupted."
+                            "NO-OP DETECTED: Your last patch produced IDENTICAL "
+                            "file content. Nothing changed on disk. You are not "
+                            "making progress. Try a DIFFERENT approach:\n"
+                            "  - If using replace_function: CHANGE the function body\n"
+                            "  - If using SEARCH/REPLACE: pick a different anchor or new code\n"
+                            "  - If using insert_code: ensure the new code isn't already there\n"
+                            "Do NOT retry with byte-identical content."
+                        )
+                        state["current_step"] = "edit"
+                        state["iteration_count"] = state.get("iteration_count", 0) + 1
+                        self.save_state(state)
+                        continue
+
+                    # ---- Verify hash actually changed ----
+                    changed, post_hash = verify_file_changed(abs_target, pre_apply_hash)
+                    if not changed:
+                        no_op_reason = "SECURITY: applied non-empty but hash unchanged"
+                        if self._check_rejection_loop(state, no_op_reason):
+                            console.print(Panel(
+                                "[bold red]CIRCUIT BREAKER: 3 fs-hash mismatches[/bold red]",
+                                border_style="bold red",
+                            ))
+                            state["current_step"] = "done"
+                            state["status"] = "failed"
+                            self.save_state(state)
+                            break
+
+                        console.print(
+                            f"[bold red]⚠ SECURITY: apply_report.applied non-empty but "
+                            f"file hash did not change. Trusting fs over agent.[/bold red]"
+                        )
+                        state["editor_feedback"] = (
+                            "Filesystem verification failed: the file did not change "
+                            "after apply. The atomic changeset may be corrupted."
                         )
                         state["current_step"] = "edit"
                         self.save_state(state)
                         continue
 
                 if not apply_report.ok:
+                    apply_err = apply_report.error or "unknown apply error"
+                    if self._check_rejection_loop(state, f"APPLY_FAILED: {apply_err}"):
+                        console.print(Panel(
+                            f"[bold red]CIRCUIT BREAKER: 3 identical apply failures[/bold red]\n"
+                            f"Reason: {apply_err}",
+                            border_style="bold red",
+                        ))
+                        state["current_step"] = "done"
+                        state["status"] = "failed"
+                        self.save_state(state)
+                        break
+
                     console.print(
                         Panel(
                             f"[bold red]ATOMIC APPLY FAILED[/bold red]\n"
-                            f"{apply_report.error}",
+                            f"{apply_err}",
                             border_style="bold red",
                         )
                     )
                     state["editor_feedback"] = (
-                        f"Filesystem apply failed: {apply_report.error}"
+                        f"Filesystem apply failed: {apply_err}"
                     )
                     state["current_step"] = "edit"
+                    state["iteration_count"] = state.get("iteration_count", 0) + 1
                     self.save_state(state)
                     continue
+                # === END PATCH D ===
 
                 current_diff = self.logger.generate_diff(
                     old_code_backup, res_code, res_file
@@ -2287,9 +2364,13 @@ class OrchestratorConsole:
                     actual_log=log,
                 )
 
+                # Synchronize state with the ACTUAL compiler result to prevent stale-state warnings
                 if not verification["consistent"]:
-                    for warning in verification["warnings"]:
-                        console.print(f"[bold red]⚠ SECURITY: {warning}[/bold red]")
+                    state["build_success"] = build_success
+                    # Only warn if the agent actively claimed a false success
+                    if claimed_success and not build_success:
+                        for warning in verification["warnings"]:
+                            console.print(f"[bold red]⚠ SECURITY: {warning}[/bold red]")
                     # Inconsistency is suspicious but not fatal — we use trusted_success
                     # (the compiler's answer) and log the discrepancy.
 
@@ -2616,17 +2697,24 @@ class OrchestratorConsole:
                     "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                 }
 
+                # === PATCH E: LessonMemoryBridge guard + .vegex → .differix ===
                 # Re-sync lessons into SQLite so new observations become rankable
-                try:
-                    bridge = LessonMemoryBridge(
-                        lessons_root=os.path.join(self.proj["path"], "lessons"),
-                        db_path=os.path.join(self.proj["path"], ".vegex", "lessons.db")
-                    )
-                    bridge.sync_all()
-                except Exception as exc:
+                if LessonMemoryBridge is None:
                     console.print(
-                        f"[dim yellow]Bridge sync after reflection failed: {exc}[/dim yellow]"
+                        "[dim yellow]Bridge module unavailable — skipping sync[/dim yellow]"
                     )
+                else:
+                    try:
+                        bridge = LessonMemoryBridge(
+                            lessons_root=os.path.join(self.proj["path"], "lessons"),
+                            db_path=os.path.join(self.proj["path"], ".differix", "lessons.db")
+                        )
+                        bridge.sync_all()
+                    except Exception as exc:
+                        console.print(
+                            f"[dim yellow]Bridge sync after reflection failed: {exc}[/dim yellow]"
+                        )
+                # === END PATCH E ===
 
                 # Return to whatever step we came from
                 previous = state.pop("_pre_reflect_step", "research")
