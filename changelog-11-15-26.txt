@@ -1,0 +1,89 @@
+==========================================================
+DEVLOG: DifferiX — November 15, 2026
+==========================================================
+
+[+] Godot MCP Toolkit Integration
+    - Created `tools/godot_mcp_adapter.py`: a lightweight stdio-based JSON-RPC
+      adapter that launches `npx -y @npgamedev/godot-mcp-server` as a subprocess
+      and communicates with the Godot Editor over MCP.
+    - Added a new operation `godot_call` to `dispatch_editor_tool` in
+      `agents/editor.py`. Agents can now invoke any of the 150+ Godot MCP tools
+      (scene creation, node manipulation, script editing, playtests, screenshots,
+      resource management, etc.) directly from the pipeline.
+    - Extended `apply_diff_blocks` to recognize `godot_call` as a valid tool
+      operation and route it through the dispatcher.
+    - Fixed a `NameError: name 'op' is not defined` caused by an accidental
+      insertion of the `godot_call` block inside `run_editor` instead of
+      `dispatch_editor_tool`. Cleaned up the function boundaries and restored
+      correct variable scoping.
+
+[+] Visual Reviewer Adaptation for Godot
+    - `tools/visual_diff.py` was left untouched: its SSIM-based comparison
+      and bounding-box extraction work with any PNG, regardless of source.
+    - Refactored `tools/visual_reviewer.py` to separate capture and comparison:
+        * Added `review_screenshot(current_png, reference_png, output_dir)` —
+          a pure comparison function that accepts pre-captured images.
+        * Kept `review_page(...)` for web workflows (Playwright-based capture).
+    - Updated `main.py` to support Godot visual review:
+        * On `.gd` or `.tscn` changes, the orchestrator calls `godot_run_project`
+          via MCP, waits briefly, then calls `game_screenshot`.
+        * The resulting PNG is passed to `review_screenshot`, which compares it
+          against `reference.png` and returns SSIM + diff regions.
+        * The game is then stopped via `godot_stop` to free resources.
+    - This gives agents real visual feedback: if the game renders incorrectly,
+      the reviewer sees it and rejects the patch before it reaches the user.
+
+[+] Core Stabilization & Test Results
+    - Phase 1.1 (module split: `ast_ops.py`, `tool_ops.py`, `ast_slicer.py`)
+      confirmed working. `apply_diff_blocks` is now a thin orchestrator.
+    - Phase 1.2 (idempotency in `atomic_changeset.py`) confirmed: no-op writes
+      are skipped and reported as `skipped` rather than `applied`, preventing
+      infinite retry loops.
+    - Phase 1.3 (reflect loop guard) in place: `last_reflection` tracking
+      prevents repeated reflection passes on the same iteration.
+    - Phase 2.1 (`smart_ast_slice`) integrated into `run_editor` for `.py` files.
+    - Phase 2.2 (`verify_context_freshness`) fixed — no longer returns `None`
+      for existing files; now returns `{fresh, hash, error}`.
+    - Phase 3.3 (rejection clustering) implemented as `_check_rejection_loop`
+      in `main.py`: three identical rejection reasons trigger a circuit breaker.
+    - All smoke tests (`py_compile`, import checks, `apply_diff_blocks` unit tests)
+      pass.
+
+[!] Known Limitations & Open Items
+    - `godot_call` requires an active Godot Editor with the MCP plugin enabled,
+      and the `@npgamedev/godot-mcp-server` bridge running (started via `npx`).
+    - Headless/CI workflows are not yet supported for Godot visual review;
+      `gda` (Godot Automation) is the planned path for headless playtests.
+    - Phase 4.2 (`check_semantics` in `code_tools.py`) is not yet implemented:
+      AST-based semantic checks (unused imports, undefined names, unreachable code)
+      are pending.
+    - Phase 4.1 (`dry_reviewer.py`) is not yet implemented: a pre-write reviewer
+      that validates diffs before they touch disk.
+
+[=] Next Steps
+    - Implement `check_semantics` (Phase 4.2) and wire it into `dispatch_editor_tool`.
+    - Build `tools/dry_reviewer.py` (Phase 4.1) and hook it into `main.py`
+      before `change_set.apply()`.
+    - Test the full Godot loop end-to-end: MCP → screenshot → visual diff →
+      LLM Vision feedback → automatic fix.
+    - Begin designing Node-Level A-Score (Phase 5): SQLite node index,
+      A-Score math, `REPLACE_METHOD` operation, and integration with TCA Tier 2.
+    - Update `ROADMAP_BUGFIX.md` with Phase 1–3 completion status and Phase 4–5
+      timeline.
+
+[+] Notes
+    - The `godot-mcp-toolkit` plugin (NPGameDev) is the recommended MCP server
+      for Godot 4.2+. It exposes 150+ operations via a consolidated tool surface
+      and supports custom GDScript extensions.
+    - The adapter is intentionally thin: it launches the npm bridge, speaks
+      JSON-RPC 2.0 over stdio, and returns structured `{ok, result, error}`.
+      No MCP SDK dependency.
+    - For `godot_call` operations, the `payload` must include `"tool"` and
+      optionally `"args"` (dict). Example:
+        {"operation": "godot_call", "tool": "godot_add_node",
+         "args": {"parent_path": "/root", "node_type": "Sprite2D",
+                  "node_name": "Player"}}
+    - The visual review flow for Godot is currently gated behind the presence
+      of `reference.png` in the project root. If absent, the step is skipped
+      with a `visual review skipped: no reference` note.
+==========================================================
