@@ -1,4 +1,5 @@
 # ===================== agents/reviewer.py =====================
+import base64
 import os
 import json
 import re
@@ -10,6 +11,10 @@ try:
     from tools.llm_client import safe_chat_completion
 except ImportError:
     from llm_client import safe_chat_completion
+
+
+# Soft cap for visual diff images to avoid bloating multimodal requests.
+_MAX_VISUAL_IMAGE_BYTES = 4 * 1024 * 1024  # 4 MB
 
 
 def get_reviewer_model() -> str:
@@ -164,6 +169,95 @@ def _compiler_indicates_failure(compiler_log: str) -> bool:
     if any(m in upper for m in failure_markers) and "SUCCESS" not in upper[:40]:
         return True
     return False
+
+
+# ---------------------------------------------------------------------------
+# Multimodal visual diff helpers
+# ---------------------------------------------------------------------------
+def _find_visual_diff_image(project_dir: str):
+    """Locate the side-by-side visual diff crop produced by visual_reviewer.
+
+    visual_review_page() writes region_N.png files into
+    <project_dir>/.differix/diffs/. We prefer region_0.png (the full-page
+    diff); otherwise fall back to the first region_*.png found.
+
+    Note: assumes visual_review_page() overwrites the file on every run,
+    so a stale crop from a previous failure won't be re-attached.
+    Returns the absolute path or None.
+    """
+    diffs_dir = os.path.join(project_dir, ".differix", "diffs")
+    if not os.path.isdir(diffs_dir):
+        return None
+
+    primary = os.path.join(diffs_dir, "region_0.png")
+    if os.path.isfile(primary):
+        return primary
+
+    try:
+        for fname in sorted(os.listdir(diffs_dir)):
+            if fname.startswith("region_") and fname.endswith(".png"):
+                return os.path.join(diffs_dir, fname)
+    except OSError:
+        pass
+    return None
+
+
+def _build_reviewer_user_content(
+    assembled_user_prompt: str,
+    project_dir: str,
+    visual_context: str,
+):
+    """Return either a plain string (text-only) or a multimodal list.
+
+    Stays a plain string unless BOTH of these are true:
+      - visual_context is non-empty (i.e. visual_review_page reported a
+        failure with feedback), AND
+      - a region_*.png crop actually exists on disk.
+
+    This preserves full backward compatibility with text-only providers.
+    """
+    if not visual_context:
+        return assembled_user_prompt
+
+    region_path = _find_visual_diff_image(project_dir)
+    if not region_path:
+        return assembled_user_prompt
+
+    try:
+        size = os.path.getsize(region_path)
+    except OSError:
+        return assembled_user_prompt
+
+    if size <= 0 or size > _MAX_VISUAL_IMAGE_BYTES:
+        print(
+            f"[Reviewer] Skipping visual diff image "
+            f"({size} bytes, cap={_MAX_VISUAL_IMAGE_BYTES}): {region_path}"
+        )
+        return assembled_user_prompt
+
+    try:
+        with open(region_path, "rb") as f:
+            b64_img = base64.b64encode(f.read()).decode("utf-8")
+    except OSError as exc:
+        print(f"[Reviewer] Failed to read visual diff image: {exc}")
+        return assembled_user_prompt
+
+    return [
+        {"type": "text", "text": assembled_user_prompt},
+        {
+            "type": "image_url",
+            "image_url": {"url": f"data:image/png;base64,{b64_img}"},
+        },
+        {
+            "type": "text",
+            "text": (
+                "Above is a side-by-side crop of the visual diff "
+                "(reference on the left, current implementation on the right). "
+                "Identify what visually broke compared to the reference and "
+                "reflect it in your verdict and reason."
+            ),
+        },
+    ]
 
 
 def run_reviewer(
@@ -373,16 +467,45 @@ def run_reviewer(
 
     active_model = get_reviewer_model()
 
-    response, provider = safe_chat_completion(
-        role_or_model="reviewer",
-        messages=[
-            {"role": "system", "content": assembled.system_prompt},
-            {"role": "user", "content": assembled.user_prompt},
-        ],
-        temperature=0.1,
-        max_tokens=4096,
-        task_spec=str(state.get("active_subtask") or state.get("target_file") or ""),
+    # ---- Multimodal user content (text-only unless visual diff exists) ----
+    user_content = _build_reviewer_user_content(
+        assembled.user_prompt, project_dir, visual_context
     )
+
+    # ---- First attempt: multimodal if we attached an image ----
+    try:
+        response, provider = safe_chat_completion(
+            role_or_model="reviewer",
+            messages=[
+                {"role": "system", "content": assembled.system_prompt},
+                {"role": "user", "content": user_content},
+            ],
+            temperature=0.1,
+            max_tokens=4096,
+            task_spec=str(state.get("active_subtask") or state.get("target_file") or ""),
+        )
+    except Exception as multi_err:
+        # Graceful fallback: if multimodal content isn't supported by the
+        # provider/transport, retry with plain text.
+        if isinstance(user_content, list):
+            print(
+                f"[Reviewer] Multimodal request failed ({multi_err}); "
+                f"retrying text-only."
+            )
+            response, provider = safe_chat_completion(
+                role_or_model="reviewer",
+                messages=[
+                    {"role": "system", "content": assembled.system_prompt},
+                    {"role": "user", "content": assembled.user_prompt},
+                ],
+                temperature=0.1,
+                max_tokens=4096,
+                task_spec=str(
+                    state.get("active_subtask") or state.get("target_file") or ""
+                ),
+            )
+        else:
+            raise
 
     if not response or not getattr(response, "choices", None) or not response.choices:
         raise RuntimeError("Reviewer: Empty response from model.")

@@ -39,6 +39,13 @@ DIAGNOSTIC_OPERATIONS = {
     "py_compile", "run_snippet",
 }
 
+# Operations that do NOT need a file_path (they work on external services or in-memory)
+NON_FILE_OPERATIONS = {
+    "run_snippet", "add_dependency", "validate_syntax",
+    "get_symbols", "extract_function", "extract_class",
+    "godot_call",
+}
+
 
 def get_editor_model() -> str:
     """Retrieve the active editor model from config with fallback support."""
@@ -247,6 +254,18 @@ def dispatch_editor_tool(operation: str, payload: dict, project_dir: str = ".") 
                 "operation": op, "result": res, "error": res.get("error"),
             }
 
+        # ---- Godot MCP bridge ----
+        if op == "godot_call":
+            from tools.godot_mcp_adapter import get_godot_adapter
+            adapter = get_godot_adapter()
+            result = adapter.call_tool(payload.get("tool", ""), payload.get("args", {}))
+            return {
+                "success": result["ok"],
+                "operation": op,
+                "result": result.get("result"),
+                "error": result.get("error"),
+            }
+
         return {
             "success": False, "operation": op,
             "error": f"Unsupported tool operation: {op}",
@@ -319,11 +338,9 @@ def apply_diff_blocks(
                 "add_dependency", "insert_code", "format", "lint", "add_import",
                 "idempotent_write", "py_compile", "validate_syntax",
                 "get_symbols", "extract_function", "extract_class",
+                "godot_call",
             ):
-                if op_type not in (
-                    "run_snippet", "add_dependency", "validate_syntax",
-                    "get_symbols", "extract_function", "extract_class",
-                ):
+                if op_type not in NON_FILE_OPERATIONS:
                     op_data["file_path"] = tpath
 
                 dispatch_res = dispatch_editor_tool(
@@ -353,6 +370,7 @@ def apply_diff_blocks(
                         "mode": f"tool_{op_type}",
                     }
 
+                # Only reload from disk for operations that actually write to the file
                 if op_type in (
                     "fix_syntax", "insert_code", "format", "lint",
                     "add_import", "idempotent_write",

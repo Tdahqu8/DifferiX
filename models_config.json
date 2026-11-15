@@ -1,7 +1,7 @@
 {
   "bindings": {
     "researcher": "google/gemini-4-hydrogen",
-    "editor": "google/gemini-4-hydrogen",
+    "editor": "deepseek/deepseek-v4.1-flash",
     "reviewer": "xiaomi/mimo-v2.6-pro"
   },
   "dynamic_routing": true

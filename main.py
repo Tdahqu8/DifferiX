@@ -2433,27 +2433,49 @@ class OrchestratorConsole:
                         self.save_state(state)
                         continue
 
-                # --- Visual Review Integration ---
+                                # --- Visual Review Integration ---
                 visual_ctx = ""
                 if res_file and res_file.endswith(".html"):
-                    ref_path = os.path.join(self.proj["path"], "reference.png")
-                    target_abs = os.path.join(self.proj["path"], res_file)
+                    # ... (существующий код для веба через Playwright) ...
+                    pass 
 
-                    if os.path.exists(ref_path) and os.path.exists(target_abs):
-                        with console.status("[magenta]Running visual diff against reference...", spinner="dots"):
+                # --- GODOT VISUAL REVIEW (через MCP) ---
+                elif res_file and res_file.endswith((".gd", ".tscn")):
+                    ref_path = os.path.join(self.proj["path"], "reference.png")
+                    
+                    if os.path.exists(ref_path):
+                        with console.status("[magenta]Running Godot visual diff...", spinner="dots"):
                             try:
-                                vis_res = visual_review_page(
-                                    html_path=target_abs,
-                                    reference_png=ref_path,
-                                    output_dir=os.path.join(self.proj["path"], ".differix", "diffs")
-                                )
-                                if vis_res and not vis_res.get("ok", True):
-                                    visual_ctx = vis_res.get("feedback", "")
-                                    console.print(f"[bold yellow]Visual Diff failed (SSIM: {vis_res.get('ssim', 0):.2f})[/bold yellow]")
-                                elif vis_res and vis_res.get("ssim"):
-                                    console.print(f"[dim green]Visual Diff passed (SSIM: {vis_res['ssim']:.2f})[/dim green]")
+                                from tools.visual_reviewer import review_screenshot
+                                from tools.godot_mcp_adapter import get_godot_adapter
+
+                                adapter = get_godot_adapter()
+                                
+                                # 1. Запускаем игру и ждем
+                                adapter.call_tool("godot_run_project", {})
+                                time.sleep(2) # Даем сцене прогрузиться
+
+                                # 2. Делаем скриншот в папку .differix
+                                diff_dir = os.path.join(self.proj["path"], ".differix", "diffs")
+                                current_png = os.path.join(diff_dir, "godot_current.png")
+                                os.makedirs(diff_dir, exist_ok=True)
+                                
+                                shot_res = adapter.call_tool("game_screenshot", {"output_path": current_png})
+                                
+                                if shot_res["ok"] and os.path.exists(current_png):
+                                    vis_res = review_screenshot(current_png, ref_path, diff_dir)
+                                    
+                                    if not vis_res.get("ok", True):
+                                        visual_ctx = vis_res.get("feedback", "")
+                                        console.print(f"[bold yellow]Visual Diff failed (SSIM: {vis_res.get('ssim', 0):.2f})[/bold yellow]")
+                                    elif vis_res.get("ssim"):
+                                        console.print(f"[dim green]Visual Diff passed (SSIM: {vis_res['ssim']:.2f})[/dim green]")
+                                
+                                # 3. Останавливаем игру, чтобы не жрала ресурсы
+                                adapter.call_tool("game_stop", {})
+
                             except Exception as vis_exc:
-                                console.print(f"[dim yellow]Visual review skipped: {vis_exc}[/dim yellow]")
+                                console.print(f"[dim yellow]Godot visual review skipped: {vis_exc}[/dim yellow]")
                 # ---- Reviewer ----
                 session_ctx = self._build_session_context(
                     state, role="reviewer", record_trigger=True
